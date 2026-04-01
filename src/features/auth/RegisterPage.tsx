@@ -60,7 +60,10 @@ export function RegisterPage() {
 
   if (loading) {
     return (
-      <AuthFormLayout title="Create Account">
+      <AuthFormLayout
+        title="Create Account"
+        subtitle="Create your PrintPe account in less than a minute."
+      >
         <div className="loader-screen">
           <PrinterLoading />
         </div>
@@ -69,8 +72,11 @@ export function RegisterPage() {
   }
 
   return (
-    <AuthFormLayout title="Create Account">
-      <form onSubmit={onSubmit} className="form">
+    <AuthFormLayout
+      title="Create Account"
+      subtitle="Create your PrintPe account in less than a minute."
+    >
+      <form onSubmit={onSubmit} className="form auth-form">
         <input
           placeholder="First name"
           value={form.firstName}
@@ -111,9 +117,9 @@ export function RegisterPage() {
         />
         {error ? <p className="error">{error}</p> : null}
         <button className="btn-primary" type="submit" disabled={loading}>
-          Register
+          Create PrintPe account
         </button>
-        <p>
+        <p className="auth-footnote">
           Already have account? <Link to="/auth/login">Login</Link>
         </p>
       </form>

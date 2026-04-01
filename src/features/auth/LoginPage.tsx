@@ -34,7 +34,10 @@ export function LoginPage() {
 
   if (loading) {
     return (
-      <AuthFormLayout title="Welcome Back">
+      <AuthFormLayout
+        title="Welcome Back"
+        subtitle="Sign in to continue your print workflow."
+      >
         <div className="loader-screen">
           <PrinterLoading />
         </div>
@@ -43,8 +46,11 @@ export function LoginPage() {
   }
 
   return (
-    <AuthFormLayout title="Welcome Back">
-      <form onSubmit={onSubmit} className="form">
+    <AuthFormLayout
+      title="Welcome Back"
+      subtitle="Sign in to continue your print workflow."
+    >
+      <form onSubmit={onSubmit} className="form auth-form">
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -60,12 +66,14 @@ export function LoginPage() {
         />
         {error ? <p className="error">{error}</p> : null}
         <button className="btn-primary" type="submit" disabled={loading}>
-          Login
+          Login to PrintPe
         </button>
-        <Link to="/auth/forgot-password">Forgot password?</Link>
-        <p>
-          New here? <Link to="/auth/register">Create account</Link>
-        </p>
+        <div className="auth-links-row">
+          <Link to="/auth/forgot-password">Forgot password?</Link>
+          <p>
+            New here? <Link to="/auth/register">Create account</Link>
+          </p>
+        </div>
       </form>
     </AuthFormLayout>
   );

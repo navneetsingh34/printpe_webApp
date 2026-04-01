@@ -242,11 +242,27 @@ export function AppShell() {
       >
         <div className="nav-left">
           <div className="brand-block">
-            <span className="brand-chip">PQ</span>
+            <span className="brand-chip brand-logo" aria-hidden="true">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="28" height="28" rx="9" fill="url(#brandGrad)" />
+                <path d="M11 14.2C11 12.7 12.2 11.5 13.7 11.5H22.3C24.1 11.5 25.5 12.9 25.5 14.7V18.2H10.5V14.2Z" fill="#FFFDF9" />
+                <path d="M10.7 18.2H25.3C26.4 18.2 27.3 19.1 27.3 20.2V23.7C27.3 24.8 26.4 25.7 25.3 25.7H10.7C9.6 25.7 8.7 24.8 8.7 23.7V20.2C8.7 19.1 9.6 18.2 10.7 18.2Z" fill="#FFFDF9" />
+                <rect x="13.2" y="20.7" width="9.6" height="4.2" rx="1.2" fill="#E67E28" opacity="0.18" />
+                <circle cx="12.8" cy="21.9" r="1" fill="#FB8D34" />
+                <path d="M13.4 26.1H22.6C23.2 26.1 23.7 25.6 23.7 25V23.7H12.3V25C12.3 25.6 12.8 26.1 13.4 26.1Z" fill="#FFF3E8" />
+                <path d="M15.3 11.5V9.7C15.3 8.8 16 8.1 16.9 8.1H19.1C20 8.1 20.7 8.8 20.7 9.7V11.5" stroke="#FFFDF9" strokeWidth="1.4" strokeLinecap="round" />
+                <defs>
+                  <linearGradient id="brandGrad" x1="4" y1="4" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#FB8D34" />
+                    <stop offset="1" stopColor="#E67E28" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </span>
             <div>
-              <p className="brand-kicker">PRINTQ PLATFORM</p>
+              <p className="brand-kicker">PRINTPE PLATFORM</p>
               <h1 className="brand-title">
-                Print<span className="brand-highlight">Q</span>
+                Print<span className="brand-highlight">Pe</span>
               </h1>
               <p className="brand-subtitle">Hi {user?.firstName ?? "User"}</p>
             </div>
