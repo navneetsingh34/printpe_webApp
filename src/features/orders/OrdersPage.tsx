@@ -26,7 +26,10 @@ type OrderTab = "latest" | "old";
 const LATEST_ORDERS_WINDOW_MS = 8 * 60 * 60 * 1000;
 
 // Status icons and colors for real-time visual feedback
-const STATUS_CONFIG: Record<DisplayStatus, { icon: string; color: string; bgColor: string }> = {
+const STATUS_CONFIG: Record<
+  DisplayStatus,
+  { icon: string; color: string; bgColor: string }
+> = {
   paid: { icon: "💳", color: "#8b5cf6", bgColor: "#f3e8ff" },
   queued: { icon: "⏳", color: "#f59e0b", bgColor: "#fef3c7" },
   printed: { icon: "🖨️", color: "#10b981", bgColor: "#d1fae5" },
@@ -101,7 +104,8 @@ function getProgressPercentage(status: DisplayStatus): number {
 
 function formatTimeRemaining(minutes: number | null | undefined): string {
   if (minutes === null || minutes === undefined) return "Calculating...";
-  const numMinutes = typeof minutes === "string" ? parseInt(minutes, 10) : minutes;
+  const numMinutes =
+    typeof minutes === "string" ? parseInt(minutes, 10) : minutes;
   if (Number.isNaN(numMinutes)) return "Calculating...";
   if (numMinutes < 0) return "⚡ Ready soon!";
   if (numMinutes === 0) return "⚡ Ready now!";
@@ -131,7 +135,9 @@ export function OrdersPage() {
   const [queueMap, setQueueMap] = useState<Record<string, QueueInfo>>({});
   const [activeTab, setActiveTab] = useState<OrderTab>("latest");
   const [socketConnected, setSocketConnected] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Record<string, number>>({});
+  const [lastUpdateTime, setLastUpdateTime] = useState<Record<string, number>>(
+    {},
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -201,7 +207,7 @@ export function OrdersPage() {
       const onOrderUpdate = (payload: OrderUpdatedPayload) => {
         const targetId = payload.id ?? payload.jobId;
         if (!targetId) return;
-        
+
         // Record update time for real-time indicators
         setLastUpdateTime((prev) => ({ ...prev, [targetId]: Date.now() }));
 
@@ -319,9 +325,16 @@ export function OrdersPage() {
       <div className="row orders-header-row">
         <div className="orders-header-content">
           <h2>My Orders</h2>
-          <div className="socket-status-indicator" title={socketConnected ? "Live updates active" : "Connecting..."}>
-            <span className={`status-dot ${socketConnected ? "connected" : "connecting"}`} />
-            <span className="status-text">{socketConnected ? "Live" : "Connecting..."}</span>
+          <div
+            className="socket-status-indicator"
+            title={socketConnected ? "Live updates active" : "Connecting..."}
+          >
+            <span
+              className={`status-dot ${socketConnected ? "connected" : "connecting"}`}
+            />
+            <span className="status-text">
+              {socketConnected ? "Live" : "Connecting..."}
+            </span>
           </div>
         </div>
         <div className="row notifications-header-right">
@@ -368,9 +381,12 @@ export function OrdersPage() {
               const displayStatus = normalizeTrackingStatus(order.status);
               const statusConfig = STATUS_CONFIG[displayStatus];
 
-              const estimatedMinutes = queueMap[order.id]?.estimatedMinutes ?? order.queuePosition;
-              const isRecentUpdate = lastUpdateTime[order.id] && (Date.now() - lastUpdateTime[order.id]) < 5000;
-              
+              const estimatedMinutes =
+                queueMap[order.id]?.estimatedMinutes ?? order.queuePosition;
+              const isRecentUpdate =
+                lastUpdateTime[order.id] &&
+                Date.now() - lastUpdateTime[order.id] < 5000;
+
               return (
                 <article
                   className={`card order-card premium-style animate-rise ${isRecentUpdate ? "real-time-pulse" : ""}`}
@@ -409,11 +425,15 @@ export function OrdersPage() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Amount</span>
-                      <span className="detail-value">{formatCurrency(order.totalPrice)}</span>
+                      <span className="detail-value">
+                        {formatCurrency(order.totalPrice)}
+                      </span>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Placed</span>
-                      <span className="detail-value">{formatDateTime(order.createdAt)}</span>
+                      <span className="detail-value">
+                        {formatDateTime(order.createdAt)}
+                      </span>
                     </div>
                   </div>
 
@@ -423,14 +443,15 @@ export function OrdersPage() {
                       {TRACK_STATUSES.map((status, index) => {
                         const current = getStatusIndex(displayStatus);
                         const reached =
-                          index <= current &&
-                          displayStatus !== "cancelled";
+                          index <= current && displayStatus !== "cancelled";
                         return (
                           <div
                             key={`label-${order.id}-${status}`}
                             className={`timeline-label-top ${reached ? "reached" : ""} ${index === current ? "current" : ""}`}
                           >
-                            <span className="label-text">{formatTimelineLabel(status)}</span>
+                            <span className="label-text">
+                              {formatTimelineLabel(status)}
+                            </span>
                             <span className="status-dot-top" />
                           </div>
                         );
@@ -441,18 +462,21 @@ export function OrdersPage() {
                       <div className="straight-line-base" />
                       <div
                         className={`straight-line-progress ${displayStatus === "cancelled" ? "cancelled" : ""}`}
-                        style={{ width: `${getProgressPercentage(displayStatus)}%` }}
+                        style={{
+                          width: `${getProgressPercentage(displayStatus)}%`,
+                        }}
                       />
                       {TRACK_STATUSES.map((status, index) => {
                         const current = getStatusIndex(displayStatus);
                         const reached =
-                          index <= current &&
-                          displayStatus !== "cancelled";
+                          index <= current && displayStatus !== "cancelled";
                         return (
                           <span
                             key={`point-${order.id}-${status}`}
                             className={`straight-point ${reached ? "reached" : ""} ${index === current ? "current" : ""}`}
-                            style={{ left: `${(index / (TRACK_STATUSES.length - 1)) * 100}%` }}
+                            style={{
+                              left: `${(index / (TRACK_STATUSES.length - 1)) * 100}%`,
+                            }}
                           />
                         );
                       })}
@@ -468,13 +492,24 @@ export function OrdersPage() {
                           Real-time
                         </div>
                       )}
-                      <button className="btn-refresh-eta" type="button" title="Refresh estimated time">
+                      <button
+                        className="btn-refresh-eta"
+                        type="button"
+                        title="Refresh estimated time"
+                      >
                         🔄 Refresh ETA
                       </button>
                     </div>
                     <p className="queue-eta">
-                      Queue #{queueMap[order.id]?.position ?? order.queuePosition ?? "N/A"} • 
-                      ETA: {formatTimeRemaining(queueMap[order.id]?.estimatedMinutes ?? estimatedMinutes)}
+                      Queue #
+                      {queueMap[order.id]?.position ??
+                        order.queuePosition ??
+                        "N/A"}{" "}
+                      • ETA:{" "}
+                      {formatTimeRemaining(
+                        queueMap[order.id]?.estimatedMinutes ??
+                          estimatedMinutes,
+                      )}
                     </p>
                   </div>
 
@@ -508,7 +543,7 @@ export function OrdersPage() {
           {oldOrders.map((order) => {
             const displayStatus = normalizeTrackingStatus(order.status);
             const statusConfig = STATUS_CONFIG[displayStatus];
-            
+
             return (
               <article
                 className="card old-order-card premium-style animate-rise"
@@ -527,8 +562,14 @@ export function OrdersPage() {
                     <span>{formatStatusLabel(displayStatus)}</span>
                   </span>
                 </div>
-                <p className="old-order-meta"><span className="meta-label">Created:</span> {formatDateTime(order.createdAt)}</p>
-                <p className="old-order-meta"><span className="meta-label">Total:</span> {formatCurrency(order.totalPrice)}</p>
+                <p className="old-order-meta">
+                  <span className="meta-label">Created:</span>{" "}
+                  {formatDateTime(order.createdAt)}
+                </p>
+                <p className="old-order-meta">
+                  <span className="meta-label">Total:</span>{" "}
+                  {formatCurrency(order.totalPrice)}
+                </p>
               </article>
             );
           })}

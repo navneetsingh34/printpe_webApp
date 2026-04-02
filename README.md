@@ -23,10 +23,10 @@ Web implementation of PrintQ aligned to the PrintQ mobile app design and functio
 Create .env from .env.example:
 
 ```
-VITE_API_BASE_URL=http://localhost:3000/api/v1
-VITE_WS_BASE_URL=http://localhost:3000
-VITE_AUTH_ACCESS_TOKEN_KEY=printq_access_token
-VITE_AUTH_REFRESH_TOKEN_KEY=printq_refresh_token
+API_BASE_URL=http://localhost:3000/api/v1
+WS_BASE_URL=http://localhost:3000
+AUTH_ACCESS_TOKEN_KEY=printq_access_token
+AUTH_REFRESH_TOKEN_KEY=printq_refresh_token
 ```
 
 ## Commands
@@ -78,4 +78,5 @@ See PARITY_TRACKER.md for implemented and remaining details.
 
 This project intentionally uses fetch for all HTTP requests.
 Do not introduce Axios.
+
 # printpe_webApp

@@ -2759,7 +2759,8 @@ a:focus-visible {
 }
 
 @keyframes status-bounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
   50% {
@@ -2768,7 +2769,8 @@ a:focus-visible {
 }
 
 @keyframes live-dot-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -2972,7 +2974,11 @@ a:focus-visible {
   padding: 8px;
   border-radius: 12px;
   border: 1px solid #f5dfc8;
-  background: linear-gradient(135deg, rgba(255, 247, 237, 0.5) 0%, rgba(255, 242, 222, 0.5) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 247, 237, 0.5) 0%,
+    rgba(255, 242, 222, 0.5) 100%
+  );
   backdrop-filter: blur(10px);
 }
 
@@ -3096,7 +3102,11 @@ a:focus-visible {
 .old-order-card {
   display: grid;
   gap: 10px;
-  background: linear-gradient(135deg, rgba(255, 250, 244, 0.6) 0%, rgba(255, 247, 237, 0.6) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 250, 244, 0.6) 0%,
+    rgba(255, 247, 237, 0.6) 100%
+  );
   border: 1.5px solid #f0d0ba;
   position: relative;
   overflow: hidden;
@@ -3501,7 +3511,11 @@ a:focus-visible {
 }
 
 .old-order-card.premium-style {
-  background: linear-gradient(135deg, rgba(253, 248, 243, 0.8) 0%, rgba(253, 243, 230, 0.8) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(253, 248, 243, 0.8) 0%,
+    rgba(253, 243, 230, 0.8) 100%
+  );
   border: 1.5px solid #f0d0ba;
   transition:
     transform 240ms var(--ease-standard),
@@ -3516,7 +3530,8 @@ a:focus-visible {
 }
 
 @keyframes dot-float {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: translateY(0);
   }
@@ -3889,12 +3904,11 @@ a:focus-visible {
   border-radius: 22px;
   padding: 18px;
   border: 1px solid rgba(240, 208, 186, 0.95);
-  background:
-    radial-gradient(
-      circle at 100% 0%,
-      rgba(251, 141, 52, 0.14),
-      transparent 44%
-    ),
+  background: radial-gradient(
+    circle at 100% 0%,
+    rgba(251, 141, 52, 0.14),
+    transparent 44%
+  );
 }
 
 .auth-card h2 {

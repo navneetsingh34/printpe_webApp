@@ -404,7 +404,7 @@ export function PrintPage() {
 
     if (!env.razorpayKeyId) {
       setError(
-        "Razorpay is not configured. Set VITE_RAZORPAY_KEY_ID and restart the app.",
+        "Razorpay is not configured. Set RAZORPAY_KEY_ID and restart the app.",
       );
       return;
     }
