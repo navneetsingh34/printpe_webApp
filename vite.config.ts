@@ -11,10 +11,10 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.API_BASE_URL": JSON.stringify(env.API_BASE_URL ?? ""),
       "import.meta.env.WS_BASE_URL": JSON.stringify(env.WS_BASE_URL ?? ""),
       "import.meta.env.AUTH_ACCESS_TOKEN_KEY": JSON.stringify(
-        env.AUTH_ACCESS_TOKEN_KEY ?? "",
+        env.AUTH_ACCESS_TOKEN_KEY ?? "printq_access_token",
       ),
       "import.meta.env.AUTH_REFRESH_TOKEN_KEY": JSON.stringify(
-        env.AUTH_REFRESH_TOKEN_KEY ?? "",
+        env.AUTH_REFRESH_TOKEN_KEY ?? "printq_refresh_token",
       ),
       "import.meta.env.RAZORPAY_KEY_ID": JSON.stringify(
         env.RAZORPAY_KEY_ID ?? "",

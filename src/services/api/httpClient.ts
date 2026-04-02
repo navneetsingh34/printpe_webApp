@@ -72,21 +72,28 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, option
   }
   if (auth) {
     const bundle = await getTokenBundle();
-    if (bundle?.accessToken) headers.set('Authorization', `Bearer ${bundle.accessToken}`);
+    if (!bundle?.accessToken) {
+      clearTimeout(timeout);
+      throw new ApiError('Unauthorized', 401);
+    }
+    headers.set('Authorization', `Bearer ${bundle.accessToken}`);
   }
-  const response = await fetch(`${env.apiBaseUrl.replace(/\/$/, '')}${path}`, { ...init, headers, signal: controller.signal });
-  clearTimeout(timeout);
-  const payload = await parseResponseBody(response);
-  if (response.status === 401 && auth && retryOnUnauthorized) {
-    if (!refreshInFlight) refreshInFlight = refreshAccessToken().finally(() => { refreshInFlight = null; });
-    const token = await refreshInFlight;
-    if (token) return apiRequest<T>(path, init, { auth, retryOnUnauthorized: false });
+  try {
+    const response = await fetch(`${env.apiBaseUrl.replace(/\/$/, '')}${path}`, { ...init, headers, signal: controller.signal });
+    const payload = await parseResponseBody(response);
+    if (response.status === 401 && auth && retryOnUnauthorized) {
+      if (!refreshInFlight) refreshInFlight = refreshAccessToken().finally(() => { refreshInFlight = null; });
+      const token = await refreshInFlight;
+      if (token) return apiRequest<T>(path, init, { auth, retryOnUnauthorized: false });
+    }
+    if (!response.ok) {
+      const message = payload && typeof payload === 'object' && 'message' in payload
+        ? normalizeMessage((payload as ApiEnvelope<T>).message)
+        : `Request failed (${response.status})`;
+      throw new ApiError(message, response.status);
+    }
+    return unwrapEnvelope<T>(payload);
+  } finally {
+    clearTimeout(timeout);
   }
-  if (!response.ok) {
-    const message = payload && typeof payload === 'object' && 'message' in payload
-      ? normalizeMessage((payload as ApiEnvelope<T>).message)
-      : `Request failed (${response.status})`;
-    throw new ApiError(message, response.status);
-  }
-  return unwrapEnvelope<T>(payload);
 }

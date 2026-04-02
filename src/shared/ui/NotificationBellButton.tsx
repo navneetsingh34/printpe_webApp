@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useAuth } from "../../features/auth/auth-context";
 
 type Props = {
@@ -6,11 +5,7 @@ type Props = {
 };
 
 export function NotificationBellButton({ onClick }: Props) {
-  const { unreadCount, refreshUnreadCount } = useAuth();
-
-  useEffect(() => {
-    void refreshUnreadCount().catch(() => undefined);
-  }, [refreshUnreadCount]);
+  const { unreadCount } = useAuth();
 
   return (
     <button type="button" className="bell-btn" onClick={onClick}>

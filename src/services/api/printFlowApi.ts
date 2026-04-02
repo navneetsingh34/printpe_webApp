@@ -1,4 +1,3 @@
-import { env } from "./env";
 import { apiRequest, ApiError } from "./httpClient";
 import { getTokenBundle } from "../storage/tokenStorage";
 
@@ -57,28 +56,20 @@ export type PaymentRecord = {
 
 export async function uploadDocument(file: File): Promise<UploadedFileResult> {
   const tokens = await getTokenBundle();
-  if (!tokens?.accessToken)
-    throw new ApiError("Please login again to upload files.", 401);
+  if (!tokens?.accessToken) {
+    throw new ApiError("Please sign in before uploading documents.", 401);
+  }
+
   const body = new FormData();
   body.append("file", file);
-  const response = await fetch(
-    `${env.apiBaseUrl.replace(/\/$/, "")}/files/upload`,
+  return apiRequest<UploadedFileResult>(
+    "/files/upload",
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${tokens.accessToken}` },
       body,
     },
+    { auth: true },
   );
-  const payload = (await response.json()) as {
-    data: UploadedFileResult;
-    message?: string;
-  };
-  if (!response.ok)
-    throw new ApiError(
-      payload.message ?? `Upload failed (${response.status})`,
-      response.status,
-    );
-  return payload.data ?? (payload as unknown as UploadedFileResult);
 }
 
 export function createPrintJob(

@@ -13,13 +13,18 @@ function optional(value: string | undefined): string {
   return (value ?? "").trim();
 }
 
+function withDefault(value: string | undefined, fallback: string): string {
+  const normalized = (value ?? "").trim();
+  return normalized || fallback;
+}
+
 const metaEnv = import.meta.env as Record<string, string | undefined>;
 
 export const env = {
   apiBaseUrl: required("API_BASE_URL", metaEnv.API_BASE_URL),
   wsBaseUrl: required("WS_BASE_URL", metaEnv.WS_BASE_URL),
-  accessTokenKey: metaEnv.AUTH_ACCESS_TOKEN_KEY ?? "printq_access_token",
-  refreshTokenKey: metaEnv.AUTH_REFRESH_TOKEN_KEY ?? "printq_refresh_token",
+  accessTokenKey: withDefault(metaEnv.AUTH_ACCESS_TOKEN_KEY, "printq_access_token"),
+  refreshTokenKey: withDefault(metaEnv.AUTH_REFRESH_TOKEN_KEY, "printq_refresh_token"),
   razorpayKeyId: optional(metaEnv.RAZORPAY_KEY_ID),
   razorpayMerchantName: optional(metaEnv.RAZORPAY_MERCHANT_NAME),
 } as const;
