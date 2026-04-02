@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { OrderItem } from "../../shared/types/order";
 import {
   getMyOrders,
@@ -21,6 +22,17 @@ const TRACK_STATUSES = [
 type DisplayStatus = (typeof TRACK_STATUSES)[number] | "cancelled";
 type QueueInfo = { position: number | null; estimatedMinutes: number | null };
 type OrderTab = "latest" | "old";
+
+const LATEST_ORDERS_WINDOW_MS = 8 * 60 * 60 * 1000;
+
+// Status icons and colors for real-time visual feedback
+const STATUS_CONFIG: Record<DisplayStatus, { icon: string; color: string; bgColor: string }> = {
+  paid: { icon: "💳", color: "#8b5cf6", bgColor: "#f3e8ff" },
+  queued: { icon: "⏳", color: "#f59e0b", bgColor: "#fef3c7" },
+  printed: { icon: "🖨️", color: "#10b981", bgColor: "#d1fae5" },
+  ready_for_pickup: { icon: "✨", color: "#8a5220", bgColor: "#ffe9d3" },
+  cancelled: { icon: "❌", color: "#ef4444", bgColor: "#fee2e2" },
+};
 
 function normalizeTrackingStatus(rawStatus: string): DisplayStatus {
   const status = String(rawStatus || "")
@@ -78,6 +90,27 @@ function formatTimelineLabel(status: (typeof TRACK_STATUSES)[number]): string {
   return titleCase(status);
 }
 
+function getProgressPercentage(status: DisplayStatus): number {
+  const statusIdx = TRACK_STATUSES.indexOf(
+    status as (typeof TRACK_STATUSES)[number],
+  );
+  if (status === "cancelled") return 0;
+  if (statusIdx < 0) return 0;
+  return Math.round(((statusIdx + 1) / TRACK_STATUSES.length) * 100);
+}
+
+function formatTimeRemaining(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return "Calculating...";
+  const numMinutes = typeof minutes === "string" ? parseInt(minutes, 10) : minutes;
+  if (Number.isNaN(numMinutes)) return "Calculating...";
+  if (numMinutes < 0) return "⚡ Ready soon!";
+  if (numMinutes === 0) return "⚡ Ready now!";
+  if (numMinutes < 60) return `${numMinutes}m left`;
+  const hours = Math.floor(numMinutes / 60);
+  const mins = numMinutes % 60;
+  return `${hours}h ${mins}m left`;
+}
+
 function isOldOrder(rawStatus: string): boolean {
   const status = String(rawStatus || "")
     .trim()
@@ -90,12 +123,15 @@ function isOldOrder(rawStatus: string): boolean {
 }
 
 export function OrdersPage() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [queueMap, setQueueMap] = useState<Record<string, QueueInfo>>({});
   const [activeTab, setActiveTab] = useState<OrderTab>("latest");
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -154,9 +190,21 @@ export function OrdersPage() {
       if (!tokens?.accessToken || !mounted) return;
       const socket = connectOrderTrackingSocket(tokens.accessToken);
 
+      socket.on("connect", () => {
+        if (mounted) setSocketConnected(true);
+      });
+
+      socket.on("disconnect", () => {
+        if (mounted) setSocketConnected(false);
+      });
+
       const onOrderUpdate = (payload: OrderUpdatedPayload) => {
         const targetId = payload.id ?? payload.jobId;
         if (!targetId) return;
+        
+        // Record update time for real-time indicators
+        setLastUpdateTime((prev) => ({ ...prev, [targetId]: Date.now() }));
+
         setOrders((prev) =>
           prev.map((order) =>
             order.id === targetId
@@ -185,6 +233,12 @@ export function OrdersPage() {
               position: null,
               estimatedMinutes: null,
             };
+            const nextEstimatedMinutes =
+              payload.estimatedReadyTime !== undefined
+                ? typeof payload.estimatedReadyTime === "string"
+                  ? parseInt(payload.estimatedReadyTime, 10) || null
+                  : payload.estimatedReadyTime
+                : current.estimatedMinutes;
             return {
               ...prev,
               [targetId]: {
@@ -192,10 +246,7 @@ export function OrdersPage() {
                   payload.queuePosition !== undefined
                     ? payload.queuePosition
                     : current.position,
-                estimatedMinutes:
-                  payload.estimatedReadyTime !== undefined
-                    ? current.estimatedMinutes
-                    : current.estimatedMinutes,
+                estimatedMinutes: nextEstimatedMinutes,
               },
             };
           });
@@ -225,12 +276,10 @@ export function OrdersPage() {
 
   const latestOrders = useMemo(() => {
     const now = Date.now();
-    const tenMinutesMs = 10 * 60 * 1000;
     return orders.filter((order) => {
-      if (isOldOrder(order.status)) return false;
       const createdAtMs = new Date(order.createdAt).getTime();
       if (Number.isNaN(createdAtMs)) return false;
-      return now - createdAtMs <= tenMinutesMs;
+      return now - createdAtMs <= LATEST_ORDERS_WINDOW_MS;
     });
   }, [orders]);
 
@@ -250,12 +299,31 @@ export function OrdersPage() {
     );
   }
   if (error) return <div className="card error">{error}</div>;
-  if (!orders.length) return <div className="card">No orders yet.</div>;
+  if (!orders.length) {
+    return (
+      <div className="card orders-empty-card orders-empty-cta-card">
+        <p>No orders yet.</p>
+        <button
+          type="button"
+          className="btn-secondary orders-empty-cta-btn"
+          onClick={() => navigate("/")}
+        >
+          Place an Order
+        </button>
+      </div>
+    );
+  }
 
   return (
     <section className="page-animate orders-page">
       <div className="row orders-header-row">
-        <h2>My Orders</h2>
+        <div className="orders-header-content">
+          <h2>My Orders</h2>
+          <div className="socket-status-indicator" title={socketConnected ? "Live updates active" : "Connecting..."}>
+            <span className={`status-dot ${socketConnected ? "connected" : "connecting"}`} />
+            <span className="status-text">{socketConnected ? "Live" : "Connecting..."}</span>
+          </div>
+        </div>
         <div className="row notifications-header-right">
           {refreshing ? (
             <div className="inline-loader">
@@ -263,7 +331,7 @@ export function OrdersPage() {
             </div>
           ) : null}
           <span className="status-pill orders-latest-pill">
-            {latestOrders.length} latest
+            {latestOrders.length} active
           </span>
         </div>
       </div>
@@ -296,105 +364,186 @@ export function OrdersPage() {
       {activeTab === "latest" ? (
         latestOrders.length ? (
           <div className="grid orders-grid animated-grid">
-            {latestOrders.map((order) => (
-              <article className="card order-card animate-rise" key={order.id}>
-                <div className="row">
-                  <h3>{order.jobNumber}</h3>
-                  <span
-                    className={
-                      normalizeTrackingStatus(order.status) === "cancelled"
-                        ? "status-pill socket-offline"
-                        : "status-pill"
-                    }
-                  >
-                    {formatStatusLabel(normalizeTrackingStatus(order.status))}
-                  </span>
-                </div>
+            {latestOrders.map((order) => {
+              const displayStatus = normalizeTrackingStatus(order.status);
+              const statusConfig = STATUS_CONFIG[displayStatus];
 
-                <div className="order-meta-grid">
-                  <p>Pages: {order.totalPages}</p>
-                  <p>Total: {formatCurrency(order.totalPrice)}</p>
-                  <p>Created: {formatDateTime(order.createdAt)}</p>
-                  <p>Est. ready: {formatDateTime(order.estimatedReadyTime)}</p>
-                </div>
+              const estimatedMinutes = queueMap[order.id]?.estimatedMinutes ?? order.queuePosition;
+              const isRecentUpdate = lastUpdateTime[order.id] && (Date.now() - lastUpdateTime[order.id]) < 5000;
+              
+              return (
+                <article
+                  className={`card order-card premium-style animate-rise ${isRecentUpdate ? "real-time-pulse" : ""}`}
+                  key={order.id}
+                >
+                  {/* Real-time update indicator */}
+                  {isRecentUpdate && <div className="update-pulse-ring" />}
 
-                <div className="order-timeline">
-                  {TRACK_STATUSES.map((status, index) => {
-                    const current = getStatusIndex(
-                      normalizeTrackingStatus(order.status),
-                    );
-                    const reached =
-                      index <= current &&
-                      normalizeTrackingStatus(order.status) !== "cancelled";
-                    return (
+                  {/* Premium Header */}
+                  <div className="premium-header">
+                    <div className="header-left">
+                      <h3 className="order-id-premium">{order.jobNumber}</h3>
+                      <p className="order-subtitle">Order Details</p>
+                    </div>
+                    <span
+                      className={`status-badge-premium status-${displayStatus}`}
+                      style={{
+                        backgroundColor: statusConfig.bgColor,
+                        color: statusConfig.color,
+                      }}
+                    >
+                      <span className="status-icon">{statusConfig.icon}</span>
+                      <span>{formatStatusLabel(displayStatus)}</span>
+                    </span>
+                  </div>
+
+                  {/* Order Details Section - Like Reference */}
+                  <div className="order-details-premium">
+                    <div className="detail-item">
+                      <span className="detail-label">File</span>
+                      <span className="detail-value">Document.pdf</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Pages</span>
+                      <span className="detail-value">{order.totalPages}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Amount</span>
+                      <span className="detail-value">{formatCurrency(order.totalPrice)}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Placed</span>
+                      <span className="detail-value">{formatDateTime(order.createdAt)}</span>
+                    </div>
+                  </div>
+
+                  {/* Straight timeline with statuses above */}
+                  <div className="zigzag-timeline-wrapper">
+                    <div className="timeline-labels-top">
+                      {TRACK_STATUSES.map((status, index) => {
+                        const current = getStatusIndex(displayStatus);
+                        const reached =
+                          index <= current &&
+                          displayStatus !== "cancelled";
+                        return (
+                          <div
+                            key={`label-${order.id}-${status}`}
+                            className={`timeline-label-top ${reached ? "reached" : ""} ${index === current ? "current" : ""}`}
+                          >
+                            <span className="label-text">{formatTimelineLabel(status)}</span>
+                            <span className="status-dot-top" />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="straight-timeline" aria-hidden="true">
+                      <div className="straight-line-base" />
                       <div
-                        key={`${order.id}-${status}`}
-                        className="timeline-step"
-                      >
-                        <span
-                          className={
-                            reached ? "timeline-dot reached" : "timeline-dot"
-                          }
-                        />
-                        <span
-                          className={
-                            index === current
-                              ? "timeline-label current"
-                              : "timeline-label"
-                          }
-                        >
-                          {formatTimelineLabel(status)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                        className={`straight-line-progress ${displayStatus === "cancelled" ? "cancelled" : ""}`}
+                        style={{ width: `${getProgressPercentage(displayStatus)}%` }}
+                      />
+                      {TRACK_STATUSES.map((status, index) => {
+                        const current = getStatusIndex(displayStatus);
+                        const reached =
+                          index <= current &&
+                          displayStatus !== "cancelled";
+                        return (
+                          <span
+                            key={`point-${order.id}-${status}`}
+                            className={`straight-point ${reached ? "reached" : ""} ${index === current ? "current" : ""}`}
+                            style={{ left: `${(index / (TRACK_STATUSES.length - 1)) * 100}%` }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
 
-                <div className="row order-live-row">
-                  <p>
-                    Queue: #
-                    {queueMap[order.id]?.position ??
-                      order.queuePosition ??
-                      "N/A"}
-                  </p>
-                  <p>
-                    ETA: {queueMap[order.id]?.estimatedMinutes ?? "N/A"} min
-                  </p>
-                </div>
-              </article>
-            ))}
+                  {/* Live Status & Actions */}
+                  <div className="live-status-section">
+                    <div className="eta-info">
+                      {socketConnected && (
+                        <div className="realtime-badge-premium">
+                          <span className="live-dot" />
+                          Real-time
+                        </div>
+                      )}
+                      <button className="btn-refresh-eta" type="button" title="Refresh estimated time">
+                        🔄 Refresh ETA
+                      </button>
+                    </div>
+                    <p className="queue-eta">
+                      Queue #{queueMap[order.id]?.position ?? order.queuePosition ?? "N/A"} • 
+                      ETA: {formatTimeRemaining(queueMap[order.id]?.estimatedMinutes ?? estimatedMinutes)}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="order-actions">
+                    <button className="action-btn secondary" type="button">
+                      📋 View Details
+                    </button>
+                    <button className="action-btn" type="button">
+                      ⚠️ Report Order
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : (
-          <div className="card orders-empty-card">
-            No latest orders from last 10 minutes.
+          <div className="card orders-empty-card orders-empty-cta-card">
+            <p>No latest orders in the last 8 hours.</p>
+            <button
+              type="button"
+              className="btn-secondary orders-empty-cta-btn"
+              onClick={() => navigate("/")}
+            >
+              Place an Order
+            </button>
           </div>
         )
       ) : oldOrders.length ? (
         <div className="grid orders-grid animated-grid">
-          {oldOrders.map((order) => (
-            <article
-              className="card old-order-card animate-rise"
-              key={order.id}
-            >
-              <div className="row">
-                <h3>{order.jobNumber}</h3>
-                <span
-                  className={
-                    normalizeTrackingStatus(order.status) === "cancelled"
-                      ? "status-pill socket-offline"
-                      : "status-pill"
-                  }
-                >
-                  {formatStatusLabel(normalizeTrackingStatus(order.status))}
-                </span>
-              </div>
-              <p>Created: {formatDateTime(order.createdAt)}</p>
-              <p>Total: {formatCurrency(order.totalPrice)}</p>
-            </article>
-          ))}
+          {oldOrders.map((order) => {
+            const displayStatus = normalizeTrackingStatus(order.status);
+            const statusConfig = STATUS_CONFIG[displayStatus];
+            
+            return (
+              <article
+                className="card old-order-card premium-style animate-rise"
+                key={order.id}
+              >
+                <div className="old-order-header">
+                  <h3>{order.jobNumber}</h3>
+                  <span
+                    className={`status-badge status-${displayStatus}`}
+                    style={{
+                      backgroundColor: statusConfig.bgColor,
+                      color: statusConfig.color,
+                    }}
+                  >
+                    <span className="status-icon">{statusConfig.icon}</span>
+                    <span>{formatStatusLabel(displayStatus)}</span>
+                  </span>
+                </div>
+                <p className="old-order-meta"><span className="meta-label">Created:</span> {formatDateTime(order.createdAt)}</p>
+                <p className="old-order-meta"><span className="meta-label">Total:</span> {formatCurrency(order.totalPrice)}</p>
+              </article>
+            );
+          })}
         </div>
       ) : (
-        <div className="card orders-empty-card">No old orders yet.</div>
+        <div className="card orders-empty-card orders-empty-cta-card">
+          <p>No old orders yet.</p>
+          <button
+            type="button"
+            className="btn-secondary orders-empty-cta-btn"
+            onClick={() => navigate("/")}
+          >
+            Place an Order
+          </button>
+        </div>
       )}
     </section>
   );

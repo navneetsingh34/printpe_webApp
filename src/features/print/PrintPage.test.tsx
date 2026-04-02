@@ -6,6 +6,11 @@ const mocked = vi.hoisted(() => ({
   getAllShops: vi.fn(),
   getShopPricing: vi.fn(),
   uploadDocument: vi.fn(),
+  createPrintJob: vi.fn(),
+  createPaymentOrder: vi.fn(),
+  verifyPayment: vi.fn(),
+  reconcilePayment: vi.fn(),
+  getPaymentByOrderId: vi.fn(),
 }));
 
 vi.mock("../../services/api/shopsApi", () => ({
@@ -15,7 +20,23 @@ vi.mock("../../services/api/shopsApi", () => ({
 
 vi.mock("../../services/api/printFlowApi", () => ({
   uploadDocument: mocked.uploadDocument,
-  createPrintJob: vi.fn(),
+  createPrintJob: mocked.createPrintJob,
+  createPaymentOrder: mocked.createPaymentOrder,
+  verifyPayment: mocked.verifyPayment,
+  reconcilePayment: mocked.reconcilePayment,
+  getPaymentByOrderId: mocked.getPaymentByOrderId,
+}));
+
+vi.mock("../auth/auth-context", () => ({
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      email: "student@example.com",
+      firstName: "Test",
+      lastName: "User",
+      phone: "9999999999",
+    },
+  }),
 }));
 
 describe("PrintPage", () => {

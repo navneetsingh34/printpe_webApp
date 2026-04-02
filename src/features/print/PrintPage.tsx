@@ -1,9 +1,16 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/auth-context";
 import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
+  createPaymentOrder,
   createPrintJob,
+  getPaymentByOrderId,
+  reconcilePayment,
   uploadDocument,
+  verifyPayment,
 } from "../../services/api/printFlowApi";
+import { env } from "../../services/api/env";
 import { getAllShops, getShopPricing } from "../../services/api/shopsApi";
 import {
   PrintShop,
@@ -13,6 +20,86 @@ import {
 import { PrinterLoading } from "../../shared/ui/PrinterLoading";
 
 type PrintStep = "intro" | "upload" | "configure" | "payment";
+type PaymentPhase =
+  | "idle"
+  | "creating_job"
+  | "creating_order"
+  | "opening_checkout"
+  | "verifying_payment"
+  | "reconciling"
+  | "failed";
+
+const RAZORPAY_CHECKOUT_URL = "https://checkout.razorpay.com/v1/checkout.js";
+
+function ensureRazorpayLoaded(): Promise<void> {
+  if (window.Razorpay) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(
+      `script[src="${RAZORPAY_CHECKOUT_URL}"]`,
+    ) as HTMLScriptElement | null;
+
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Failed to load Razorpay checkout script.")),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_URL;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () =>
+      reject(new Error("Failed to load Razorpay checkout script."));
+    document.body.appendChild(script);
+  });
+}
+
+function openRazorpayCheckout(options: {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  orderId: string;
+  prefill: { name?: string; email?: string; contact?: string };
+  notes: Record<string, string>;
+}): Promise<{
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}> {
+  return new Promise((resolve, reject) => {
+    if (!window.Razorpay) {
+      reject(new Error("Razorpay SDK not available in browser."));
+      return;
+    }
+
+    const checkout = new window.Razorpay({
+      key: options.key,
+      amount: String(options.amount),
+      currency: options.currency || "INR",
+      name: options.name,
+      description: options.description,
+      order_id: options.orderId,
+      prefill: options.prefill,
+      notes: options.notes,
+      theme: { color: "#7C4DFF" },
+      handler: (response) => resolve(response),
+      modal: {
+        ondismiss: () => reject(new Error("Razorpay checkout dismissed")),
+      },
+    });
+
+    checkout.open();
+  });
+}
 
 function defaultPricing(): ShopPricingConfig {
   return {
@@ -101,6 +188,8 @@ function applyDoubleSidedDiscount(
 }
 
 export function PrintPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [shops, setShops] = useState<PrintShop[]>([]);
   const [shopId, setShopId] = useState("");
@@ -119,6 +208,36 @@ export function PrintPage() {
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdJobId, setCreatedJobId] = useState("");
+  const [createdJobNumber, setCreatedJobNumber] = useState("");
+  const [paymentPhase, setPaymentPhase] = useState<PaymentPhase>("idle");
+  const [payableAmount, setPayableAmount] = useState<number | null>(null);
+
+  const paymentPhaseLabel: Record<PaymentPhase, string> = {
+    idle: "Ready to pay",
+    creating_job: "Creating print job",
+    creating_order: "Creating payment order",
+    opening_checkout: "Opening Razorpay checkout",
+    verifying_payment: "Verifying payment",
+    reconciling: "Reconciling payment status",
+    failed: "Payment failed",
+  };
+
+  const resetFlow = () => {
+    setStep("intro");
+    setFile(null);
+    setUploadedFileId("");
+    setFilePages(1);
+    setCopies(1);
+    setColor(false);
+    setDoubleSided(false);
+    setPaperSize(paperOptions[0] ?? "A4");
+    setBinding(bindingOptions.find((item) => item.id === "none")?.id ?? "none");
+    setCreatedJobId("");
+    setCreatedJobNumber("");
+    setPaymentPhase("idle");
+    setPayableAmount(null);
+  };
 
   useEffect(() => {
     const preferredShopId = searchParams.get("shopId");
@@ -205,21 +324,13 @@ export function PrintPage() {
     const bindingFee =
       selectedBinding?.id === "none" ? 0 : Number(selectedBinding?.price ?? 0);
 
-    // Add platform and payment fees
-    const platformFee = 1; // Rs 1 fixed platform fee
-    const subtotal = discountedPrintCost + bindingFee;
-    const razorpayFee =
-      Math.round((subtotal + platformFee) * 0.029 * 100) / 100; // 2.9% payment gateway fee
-    const total = subtotal + platformFee + razorpayFee;
+    const total = discountedPrintCost + bindingFee;
 
     return {
       tier,
       basePrintCost,
       discountedPrintCost,
       bindingFee,
-      platformFee,
-      razorpayFee,
-      subtotal,
       total,
       totalSheets,
       bindingLabel: selectedBinding?.label ?? "None",
@@ -244,6 +355,9 @@ export function PrintPage() {
 
     setIsUploading(true);
     setFile(nextFile);
+    setCreatedJobId("");
+    setCreatedJobNumber("");
+    setPayableAmount(null);
     try {
       const uploaded = await uploadDocument(nextFile);
       setUploadedFileId(uploaded.id);
@@ -288,42 +402,119 @@ export function PrintPage() {
       return;
     }
 
+    if (!env.razorpayKeyId) {
+      setError(
+        "Razorpay is not configured. Set VITE_RAZORPAY_KEY_ID and restart the app.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
-    setStatus("Creating print job...");
+    let currentOrderId = "";
     try {
-      const printJob = await createPrintJob({
-        shopId,
-        fileId: uploadedFileId,
-        totalPages: filePages,
-        printOptions: {
-          copies,
-          color,
-          doubleSided,
-          paperSize,
-          binding: binding || undefined,
+      let currentJobId = createdJobId;
+      let currentJobNumber = createdJobNumber;
+
+      setPaymentPhase("creating_job");
+      setStatus("Creating print job...");
+
+      if (!currentJobId) {
+        const printJob = await createPrintJob({
+          shopId,
+          fileId: uploadedFileId,
+          totalPages: filePages,
+          printOptions: {
+            copies,
+            color,
+            doubleSided,
+            paperSize,
+            binding: binding || undefined,
+          },
+        });
+        currentJobId = printJob.id;
+        currentJobNumber = printJob.jobNumber;
+        setCreatedJobId(printJob.id);
+        setCreatedJobNumber(printJob.jobNumber);
+      }
+
+      setPaymentPhase("creating_order");
+      setStatus("Creating payment order...");
+      const order = await createPaymentOrder(currentJobId);
+      currentOrderId = order.orderId;
+      if (typeof order.totalAmount === "number") {
+        setPayableAmount(order.totalAmount);
+      }
+
+      setPaymentPhase("opening_checkout");
+      setStatus("Opening Razorpay checkout...");
+      await ensureRazorpayLoaded();
+
+      const paymentResult = await openRazorpayCheckout({
+        key: env.razorpayKeyId,
+        amount: order.amount,
+        currency: order.currency || "INR",
+        name: env.razorpayMerchantName || "PrintQ",
+        description: `Print order ${currentJobNumber || order.jobNumber || "PrintQ"}`,
+        orderId: order.orderId,
+        prefill: {
+          name: [user?.firstName, user?.lastName].filter(Boolean).join(" "),
+          email: user?.email,
+          contact: user?.phone,
+        },
+        notes: {
+          shopId,
+          shopName: selectedShop.name,
+          fileName: file.name,
         },
       });
-      setStatus(`Print job created: ${printJob.jobNumber}`);
-      setStep("intro");
-      setFile(null);
-      setUploadedFileId("");
-      setFilePages(1);
-      setCopies(1);
-      setColor(false);
-      setDoubleSided(false);
-      setPaperSize(paperOptions[0] ?? "A4");
-      setBinding(
-        bindingOptions.find((item) => item.id === "none")?.id ?? "none",
-      );
+
+      setPaymentPhase("verifying_payment");
+      setStatus("Verifying payment...");
+      await verifyPayment({
+        razorpayOrderId: paymentResult.razorpay_order_id,
+        razorpayPaymentId: paymentResult.razorpay_payment_id,
+        razorpaySignature: paymentResult.razorpay_signature,
+      });
+
+      setStatus("Payment successful. Your print request is now in queue.");
+      resetFlow();
+      navigate("/orders");
     } catch (e) {
+      const message = (e as Error).message || "Payment failed";
+      const isCancelled = message.toLowerCase().includes("dismissed");
+      const canReconcile = Boolean(currentOrderId) && !isCancelled;
+
+      if (canReconcile) {
+        try {
+          setPaymentPhase("reconciling");
+          setStatus("Reconciling payment status...");
+          const reconciled = await reconcilePayment(currentOrderId);
+          const payment =
+            reconciled.payment ?? (await getPaymentByOrderId(currentOrderId));
+          if (payment.status === "captured") {
+            setStatus("Payment confirmed. Your print request is now in queue.");
+            resetFlow();
+            navigate("/orders");
+            return;
+          }
+        } catch {
+          // fall through and show the original failure message
+        }
+      }
+
+      setPaymentPhase("failed");
       setStatus("");
-      setError((e as Error).message || "Failed to create print job");
+      if (isCancelled) {
+        setError("Payment was cancelled in Razorpay checkout.");
+      } else {
+        setError(message);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (isUploading || isSubmitting) {
+  if (isUploading) {
     return (
       <section className="page-animate print-page">
         <div className="loader-screen">
@@ -734,14 +925,14 @@ export function PrintPage() {
                   <div className="breakdown-row">
                     <span className="breakdown-label">Platform fee</span>
                     <span className="breakdown-value price">
-                      Rs {estimate.platformFee.toFixed(2)}
+                      Included at payment
                     </span>
                   </div>
 
                   <div className="breakdown-row">
                     <span className="breakdown-label">Payment gateway fee</span>
                     <span className="breakdown-value price">
-                      Rs {estimate.razorpayFee.toFixed(2)}
+                      Included at payment
                     </span>
                   </div>
 
@@ -773,13 +964,21 @@ export function PrintPage() {
           ) : null}
 
           {step === "payment" ? (
-            <button
-              className="btn-primary"
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Submitting..." : "Confirm & Create Job"}
-            </button>
+            <>
+              <p className="print-feedback print-feedback-success">
+                Payment status: {paymentPhaseLabel[paymentPhase]}
+                {payableAmount !== null
+                  ? ` | Payable amount: Rs ${payableAmount.toFixed(2)}`
+                  : ""}
+              </p>
+              <button
+                className="btn-primary"
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Processing payment..." : "Pay with Razorpay"}
+              </button>
+            </>
           ) : null}
 
           {status ? (
