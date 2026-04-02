@@ -115,17 +115,6 @@ function formatTimeRemaining(minutes: number | null | undefined): string {
   return `${hours}h ${mins}m left`;
 }
 
-function isOldOrder(rawStatus: string): boolean {
-  const status = String(rawStatus || "")
-    .trim()
-    .toLowerCase();
-  return (
-    status.includes("complete") ||
-    status.includes("cancel") ||
-    status === "picked_up"
-  );
-}
-
 export function OrdersPage() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderItem[]>([]);
