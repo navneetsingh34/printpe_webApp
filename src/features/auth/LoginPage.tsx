@@ -5,7 +5,6 @@ import { AuthFormLayout } from "./AuthFormLayout";
 import { PrinterLoading } from "../../shared/ui/PrinterLoading";
 import { env } from "../../services/api/env";
 import { GoogleLogoIcon } from "./GoogleLogoIcon";
-import { createDirectGoogleIdTokenUrl } from "./googleOAuth";
 
 function resolveOAuthApiBaseUrl() {
   const configured = env.apiBaseUrl.replace(/\/$/, "");
@@ -81,12 +80,6 @@ export function LoginPage() {
   const onGoogleLogin = () => {
     setError("");
     const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
-    const directGoogleUrl = createDirectGoogleIdTokenUrl(returnUrl);
-    if (directGoogleUrl) {
-      window.location.href = directGoogleUrl;
-      return;
-    }
-
     const oauthApiBaseUrl = resolveOAuthApiBaseUrl();
     const oauthStartUrl = `${oauthApiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
     window.location.href = oauthStartUrl;
