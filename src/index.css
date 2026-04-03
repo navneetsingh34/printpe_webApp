@@ -573,7 +573,11 @@ h4 {
   border-radius: 16px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, rgba(251, 141, 52, 0.2), rgba(251, 141, 52, 0.08));
+  background: linear-gradient(
+    180deg,
+    rgba(251, 141, 52, 0.2),
+    rgba(251, 141, 52, 0.08)
+  );
   border: 1px solid rgba(251, 141, 52, 0.24);
   font-size: 24px;
 }
@@ -1216,6 +1220,10 @@ a:focus-visible {
 .document-preview-page .document-preview-card {
   display: grid;
   gap: 16px;
+}
+
+.document-preview-page .selected-files-list {
+  width: min(100%, 720px);
 }
 
 .document-preview-shell {

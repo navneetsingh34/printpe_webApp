@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/auth-context";
+import { useLocation } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import {
@@ -29,6 +30,15 @@ type PaymentPhase =
   | "verifying_payment"
   | "reconciling"
   | "failed";
+
+const DUPLICATE_FILE_WARNING =
+  "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.";
+
+type PrintPageLocationState = {
+  resumeFromPreview?: boolean;
+  files?: File[];
+  previewIndex?: number;
+};
 
 const RAZORPAY_CHECKOUT_URL = "https://checkout.razorpay.com/v1/checkout.js";
 
@@ -227,6 +237,7 @@ function dedupeFiles(
 export function PrintPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [shops, setShops] = useState<PrintShop[]>([]);
   const [shopId, setShopId] = useState("");
@@ -249,10 +260,16 @@ export function PrintPage() {
   const [previewIndex, setPreviewIndex] = useState(0);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [leaveWarningOpen, setLeaveWarningOpen] = useState(false);
+  const [duplicateWarningOpen, setDuplicateWarningOpen] = useState(false);
 
   const statusIsWarning = status.toLowerCase().includes("already uploaded");
 
   const activePreviewFile = files[previewIndex] ?? files[0] ?? null;
+
+  const showDuplicateFileWarning = () => {
+    setStatus(DUPLICATE_FILE_WARNING);
+    setDuplicateWarningOpen(true);
+  };
 
   const paymentPhaseLabel: Record<PaymentPhase, string> = {
     idle: "Ready to pay",
@@ -287,6 +304,34 @@ export function PrintPage() {
       setPreviewIndex(files.length - 1);
     }
   }, [files, previewIndex]);
+
+  useEffect(() => {
+    const locationState = location.state as PrintPageLocationState | null;
+    if (!locationState?.resumeFromPreview) {
+      return;
+    }
+
+    const restoredFiles = Array.isArray(locationState.files)
+      ? locationState.files
+      : [];
+
+    setStep("upload");
+
+    if (restoredFiles.length > 0) {
+      setFiles(restoredFiles);
+      const requestedIndex = locationState.previewIndex ?? 0;
+      const boundedIndex = Math.max(
+        0,
+        Math.min(requestedIndex, restoredFiles.length - 1),
+      );
+      setPreviewIndex(boundedIndex);
+    }
+
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: null,
+    });
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const resetFlow = () => {
     setStep("intro");
@@ -419,20 +464,18 @@ export function PrintPage() {
 
     const { uniqueFiles, duplicateCount } = dedupeFiles(files, nextFiles);
     if (duplicateCount > 0 && uniqueFiles.length === 0 && files.length > 0) {
-      setStatus(
-        "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.",
-      );
+      showDuplicateFileWarning();
       return;
     }
 
     setFiles(uniqueFiles.length > 0 ? uniqueFiles : nextFiles);
     setPreviewIndex(0);
     setPayableAmount(null);
-    setFilePages(Math.max(1, (uniqueFiles.length > 0 ? uniqueFiles : nextFiles).length));
+    setFilePages(
+      Math.max(1, (uniqueFiles.length > 0 ? uniqueFiles : nextFiles).length),
+    );
     if (duplicateCount > 0) {
-      setStatus(
-        "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.",
-      );
+      showDuplicateFileWarning();
       return;
     }
     setStatus("");
@@ -456,9 +499,7 @@ export function PrintPage() {
       const merged = [...prev, ...uniqueFiles];
       setFilePages(Math.max(1, merged.length));
       if (duplicateCount > 0) {
-        setStatus(
-          "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.",
-        );
+        showDuplicateFileWarning();
       } else {
         setStatus("");
       }
@@ -666,9 +707,7 @@ export function PrintPage() {
           shopId,
           shopName: selectedShop.name,
           fileName:
-            files.length === 1
-              ? files[0].name
-              : `${files.length} files`,
+            files.length === 1 ? files[0].name : `${files.length} files`,
         },
       });
 
@@ -927,6 +966,8 @@ export function PrintPage() {
                             fileUrl: previewUrl,
                             fileName: activePreviewFile.name,
                             mimeType: activePreviewFile.type,
+                            files,
+                            selectedIndex: previewIndex,
                           },
                         });
                       }}
@@ -1045,7 +1086,10 @@ export function PrintPage() {
                     <li>
                       Check margins, page size, and line spacing before upload.
                     </li>
-                    <li>You can upload multiple files and they print in upload order.</li>
+                    <li>
+                      You can upload multiple files and they print in upload
+                      order.
+                    </li>
                   </ul>
                 </div>
               ) : null}
@@ -1082,10 +1126,11 @@ export function PrintPage() {
                     </button>
                   </div>
                   <p>
-                    {files.length} file{files.length > 1 ? "s" : ""} selected
-                    ({formatFileSize(
+                    {files.length} file{files.length > 1 ? "s" : ""} selected (
+                    {formatFileSize(
                       files.reduce((sum, current) => sum + current.size, 0),
-                    )})
+                    )}
+                    )
                   </p>
                   <ul>
                     {files.map((item, index) => (
@@ -1372,7 +1417,7 @@ export function PrintPage() {
             </>
           ) : null}
 
-          {status ? (
+          {status && !statusIsWarning ? (
             <p
               className={`print-feedback ${statusIsWarning ? "print-feedback-warning" : "print-feedback-success"}`}
             >
@@ -1396,7 +1441,10 @@ export function PrintPage() {
           <article className="scan-modal-card print-leave-modal-card">
             <div className="print-leave-modal-icon">⚠️</div>
             <h3 id="leave-warning-title">Leave this page?</h3>
-            <p id="leave-warning-description" className="print-leave-modal-text">
+            <p
+              id="leave-warning-description"
+              className="print-leave-modal-text"
+            >
               Uploaded files will not be saved if you go back. You can return
               later and upload them again.
             </p>
@@ -1414,6 +1462,46 @@ export function PrintPage() {
                 onClick={confirmLeavePrintFlow}
               >
                 Leave page
+              </button>
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {duplicateWarningOpen ? (
+        <div
+          className="scan-modal print-leave-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-warning-title"
+          aria-describedby="duplicate-warning-description"
+        >
+          <article className="scan-modal-card print-leave-modal-card">
+            <div className="print-leave-modal-icon">ℹ️</div>
+            <h3 id="duplicate-warning-title">File already uploaded</h3>
+            <p
+              id="duplicate-warning-description"
+              className="print-leave-modal-text"
+            >
+              {DUPLICATE_FILE_WARNING}
+            </p>
+            <div className="print-leave-modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setDuplicateWarningOpen(false)}
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  setDuplicateWarningOpen(false);
+                  setStep("configure");
+                }}
+              >
+                Go to Configure
               </button>
             </div>
           </article>
