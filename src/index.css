@@ -4218,13 +4218,14 @@ a:focus-visible {
 }
 
 .auth-card-single--signup .btn-primary {
-  background: linear-gradient(135deg, #f06a2e 0%, #d9541a 100%);
-  border-color: rgba(240, 106, 46, 0.28);
-  box-shadow: 0 12px 24px rgba(240, 106, 46, 0.24);
+  background: #f8923f;
+  border-color: rgba(248, 146, 63, 0.35);
+  box-shadow: 0 12px 24px rgba(248, 146, 63, 0.3);
 }
 
 .auth-card-single--signup .btn-primary:hover {
-  box-shadow: 0 14px 26px rgba(240, 106, 46, 0.3);
+  background: #f8923f;
+  box-shadow: 0 14px 26px rgba(248, 146, 63, 0.38);
 }
 
 .auth-card-single--recovery .auth-form-pane::before {
