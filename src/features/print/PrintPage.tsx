@@ -12,6 +12,7 @@ import {
 } from "../../services/api/printFlowApi";
 import { env } from "../../services/api/env";
 import { getAllShops, getShopPricing } from "../../services/api/shopsApi";
+import { getShopPrinters } from "../../services/api/printersApi";
 import {
   PrintShop,
   ShopPricingConfig,
@@ -167,10 +168,12 @@ function validateFile(file: File): string | null {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
   ];
   const maxBytes = 50 * 1024 * 1024;
   if (!allowed.includes(file.type)) {
-    return "Only PDF, DOC, and DOCX files are supported.";
+    return "Only PDF, DOC, DOCX, JPG, and PNG files are supported.";
   }
   if (file.size > maxBytes) {
     return "File size must be 50MB or less.";
@@ -187,6 +190,40 @@ function applyDoubleSidedDiscount(
   return cost - cost * (discountPercent / 100);
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(2)} KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function getFileSignature(file: File): string {
+  return `${file.name}::${file.size}::${file.lastModified}`;
+}
+
+function dedupeFiles(
+  existingFiles: File[],
+  candidateFiles: File[],
+): { uniqueFiles: File[]; duplicateCount: number } {
+  const seen = new Set(existingFiles.map(getFileSignature));
+  const uniqueFiles: File[] = [];
+  let duplicateCount = 0;
+
+  for (const file of candidateFiles) {
+    const signature = getFileSignature(file);
+    if (seen.has(signature)) {
+      duplicateCount += 1;
+      continue;
+    }
+
+    seen.add(signature);
+    uniqueFiles.push(file);
+  }
+
+  return { uniqueFiles, duplicateCount };
+}
+
 export function PrintPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -196,7 +233,7 @@ export function PrintPage() {
   const [step, setStep] = useState<PrintStep>("intro");
   const [pricing, setPricing] = useState<ShopPricingConfig>(defaultPricing());
   const [pricingLoadError, setPricingLoadError] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [filePages, setFilePages] = useState(1);
   const [copies, setCopies] = useState(1);
   const [color, setColor] = useState(false);
@@ -209,10 +246,21 @@ export function PrintPage() {
   const [paymentPhase, setPaymentPhase] = useState<PaymentPhase>("idle");
   const [payableAmount, setPayableAmount] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [leaveWarningOpen, setLeaveWarningOpen] = useState(false);
+
+  const statusIsWarning = status.toLowerCase().includes("already uploaded");
+
+  const activePreviewFile = files[previewIndex] ?? files[0] ?? null;
+  const totalSelectedSizeMb = useMemo(
+    () => files.reduce((sum, current) => sum + current.size, 0) / 1024 / 1024,
+    [files],
+  );
 
   const paymentPhaseLabel: Record<PaymentPhase, string> = {
     idle: "Ready to pay",
-    creating_job: "Uploading document and creating print job",
+    creating_job: "Uploading documents and creating print job",
     creating_order: "Creating payment order",
     opening_checkout: "Opening Razorpay checkout",
     verifying_payment: "Verifying payment",
@@ -221,22 +269,33 @@ export function PrintPage() {
   };
 
   useEffect(() => {
-    if (!file) {
+    if (!activePreviewFile) {
       setPreviewUrl("");
       return;
     }
 
-    const nextUrl = URL.createObjectURL(file);
+    const nextUrl = URL.createObjectURL(activePreviewFile);
     setPreviewUrl(nextUrl);
 
     return () => {
       URL.revokeObjectURL(nextUrl);
     };
-  }, [file]);
+  }, [activePreviewFile]);
+
+  useEffect(() => {
+    if (files.length === 0) {
+      setPreviewIndex(0);
+      return;
+    }
+    if (previewIndex >= files.length) {
+      setPreviewIndex(files.length - 1);
+    }
+  }, [files, previewIndex]);
 
   const resetFlow = () => {
     setStep("intro");
-    setFile(null);
+    setFiles([]);
+    setPreviewIndex(0);
     setFilePages(1);
     setCopies(1);
     setColor(false);
@@ -345,43 +404,142 @@ export function PrintPage() {
     };
   }, [color, copies, doubleSided, filePages, selectedBinding, selectedPaper]);
 
-  const onPickFile = async (nextFile: File | null) => {
+  const onPickFiles = async (nextFiles: File[]) => {
     setError("");
     setStatus("");
-    if (!nextFile) {
-      setFile(null);
+    if (!nextFiles.length) {
+      setFiles([]);
       return;
     }
 
-    const fileError = validateFile(nextFile);
-    if (fileError) {
-      setFile(null);
-      setError(fileError);
+    for (const candidate of nextFiles) {
+      const fileError = validateFile(candidate);
+      if (fileError) {
+        setFiles([]);
+        setError(fileError);
+        return;
+      }
+    }
+
+    const { uniqueFiles, duplicateCount } = dedupeFiles(files, nextFiles);
+    if (duplicateCount > 0 && uniqueFiles.length === 0 && files.length > 0) {
+      setStatus(
+        "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.",
+      );
       return;
     }
 
-    setFile(nextFile);
+    setFiles(uniqueFiles.length > 0 ? uniqueFiles : nextFiles);
+    setPreviewIndex(0);
     setPayableAmount(null);
-    setFilePages(1);
-    setStatus("Document selected. Preview it before payment.");
-    setStep("configure");
+    setFilePages(Math.max(1, (uniqueFiles.length > 0 ? uniqueFiles : nextFiles).length));
+    if (duplicateCount > 0) {
+      setStatus(
+        "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.",
+      );
+      return;
+    }
+    setStatus("");
+  };
+
+  const onAppendFiles = async (extraFiles: File[]) => {
+    setError("");
+    setStatus("");
+    if (!extraFiles.length) return;
+
+    for (const candidate of extraFiles) {
+      const fileError = validateFile(candidate);
+      if (fileError) {
+        setError(fileError);
+        return;
+      }
+    }
+
+    setFiles((prev) => {
+      const { uniqueFiles, duplicateCount } = dedupeFiles(prev, extraFiles);
+      const merged = [...prev, ...uniqueFiles];
+      setFilePages(Math.max(1, merged.length));
+      if (duplicateCount > 0) {
+        setStatus(
+          "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.",
+        );
+      } else {
+        setStatus("");
+      }
+      return merged;
+    });
   };
 
   const proceedToPayment = () => {
-    if (!file) {
-      setError("Please select a document before continuing.");
+    if (!files.length) {
+      setError("Please select at least one document before continuing.");
       return;
     }
     setError("");
     setStep("payment");
   };
 
+  const removeFileAtIndex = (indexToRemove: number) => {
+    setError("");
+    setStatus("");
+    setFiles((prev) => {
+      if (indexToRemove < 0 || indexToRemove >= prev.length) return prev;
+      const next = prev.filter((_, index) => index !== indexToRemove);
+      setFilePages(Math.max(1, next.length));
+      if (next.length === 0) {
+        setStep("upload");
+        setStatus("");
+      } else {
+        setStatus("");
+      }
+      return next;
+    });
+  };
+
+  const moveFile = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setFiles((prev) => {
+      if (
+        fromIndex < 0 ||
+        fromIndex >= prev.length ||
+        toIndex < 0 ||
+        toIndex >= prev.length
+      ) {
+        return prev;
+      }
+
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      setPreviewIndex((current) => {
+        if (current === fromIndex) return toIndex;
+        if (fromIndex < toIndex && current > fromIndex && current <= toIndex) {
+          return current - 1;
+        }
+        if (toIndex < fromIndex && current >= toIndex && current < fromIndex) {
+          return current + 1;
+        }
+        return current;
+      });
+
+      setStatus("");
+      return next;
+    });
+  };
+
+  const handleDropOnIndex = (dropIndex: number) => {
+    if (dragIndex === null) return;
+    moveFile(dragIndex, dropIndex);
+    setDragIndex(null);
+  };
+
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     setStatus("");
-    if (!file || !shopId || !selectedPaper) {
-      setError("Select a shop and document first.");
+    if (!files.length || !shopId || !selectedPaper) {
+      setError("Select a shop and at least one document first.");
       return;
     }
 
@@ -389,6 +547,23 @@ export function PrintPage() {
     if (!selectedShop?.isActive) {
       setError(
         "Selected shop is currently offline. Please choose an online shop.",
+      );
+      return;
+    }
+
+    setStatus("Checking shop and printer availability...");
+    const shopPrinters = await getShopPrinters(shopId);
+    const hasOnlinePrinter = shopPrinters.some((printer) => {
+      const normalizedStatus = String(printer.status ?? "")
+        .trim()
+        .toLowerCase();
+      return normalizedStatus === "online";
+    });
+
+    if (!hasOnlinePrinter) {
+      setStatus("");
+      setError(
+        "This shop is online, but no printer is currently online. Please try again later or choose another shop.",
       );
       return;
     }
@@ -402,24 +577,45 @@ export function PrintPage() {
 
     setIsSubmitting(true);
     let currentOrderId = "";
-    let uploadedFileId: string | null = null;
+    let uploadedFiles: Array<{
+      id: string;
+      fileName: string;
+      pageCount: number;
+    }> | null = null;
     let resolvedPages = filePages;
 
     const createJobForCapturedPayment = async (orderId: string) => {
       setPaymentPhase("creating_job");
-      setStatus("Uploading document and creating print job...");
+      setStatus("Uploading documents and creating print job...");
 
-      if (!uploadedFileId) {
-        const uploaded = await uploadDocument(file);
-        uploadedFileId = uploaded.id;
-        resolvedPages =
-          Number(uploaded.pageCount) > 0 ? Number(uploaded.pageCount) : filePages;
+      if (!uploadedFiles) {
+        uploadedFiles = [];
+        for (const currentFile of files) {
+          const uploaded = await uploadDocument(currentFile);
+          const pageCount =
+            Number(uploaded.pageCount) > 0 ? Number(uploaded.pageCount) : 1;
+          uploadedFiles.push({
+            id: uploaded.id,
+            fileName: currentFile.name,
+            pageCount,
+          });
+        }
+
+        resolvedPages = uploadedFiles.reduce(
+          (sum, item) => sum + item.pageCount,
+          0,
+        );
         setFilePages(resolvedPages);
+      }
+
+      const primaryFileId = uploadedFiles?.[0]?.id;
+      if (!primaryFileId) {
+        throw new Error("No files were uploaded. Please try again.");
       }
 
       await createPrintJob({
         shopId,
-        fileId: uploadedFileId,
+        fileId: primaryFileId,
         totalPages: resolvedPages,
         paymentOrderId: orderId,
         printOptions: {
@@ -428,6 +624,12 @@ export function PrintPage() {
           doubleSided,
           paperSize,
           binding: binding || undefined,
+          documentQueue: uploadedFiles.map((item) => ({
+            fileId: item.id,
+            fileName: item.fileName,
+            pageCount: item.pageCount,
+            copies,
+          })),
         },
       });
     };
@@ -438,7 +640,10 @@ export function PrintPage() {
       const order = await createPaymentOrder({
         estimatedPrintCost: estimate.total,
         shopId,
-        description: file.name,
+        description:
+          files.length === 1
+            ? files[0].name
+            : `${files.length} documents for printing`,
       });
       currentOrderId = order.orderId;
       if (typeof order.totalAmount === "number") {
@@ -464,7 +669,10 @@ export function PrintPage() {
         notes: {
           shopId,
           shopName: selectedShop.name,
-          fileName: file.name,
+          fileName:
+            files.length === 1
+              ? files[0].name
+              : `${files.length} files`,
         },
       });
 
@@ -517,10 +725,51 @@ export function PrintPage() {
     }
   };
 
+  const handleBackClick = () => {
+    if (step === "payment") {
+      setStep("configure");
+      return;
+    }
+
+    if (step === "configure") {
+      setStep("upload");
+      return;
+    }
+
+    if (step === "upload") {
+      if (files.length > 0) {
+        setLeaveWarningOpen(true);
+        return;
+      }
+      if (window.history.length > 1) {
+        navigate(-1);
+        return;
+      }
+      navigate("/");
+      return;
+    }
+
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate("/");
+  };
+
+  const confirmLeavePrintFlow = () => {
+    setLeaveWarningOpen(false);
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
+
   return (
     <section className="page-animate print-page">
       <div className="page-topbar">
-        <BackButton fallbackPath="/" label="Back" />
+        <BackButton fallbackPath="/" label="Back" onClick={handleBackClick} />
       </div>
 
       <div className="print-header animate-rise delay-1">
@@ -548,7 +797,7 @@ export function PrintPage() {
             >
               <div className="step-number">1</div>
               <h4>Upload</h4>
-              <p>Choose your document (PDF, DOC, DOCX)</p>
+              <p>Choose documents/images (PDF, DOC, DOCX, JPG, PNG)</p>
             </button>
 
             <div className="step-arrow">→</div>
@@ -599,8 +848,9 @@ export function PrintPage() {
           {step === "upload" ? (
             <div className="upload-section animate-rise delay-1">
               <div
-                className={`upload-zone ${file ? "has-file" : ""}`}
+                className={`upload-zone ${files.length ? "has-file" : ""}`}
                 onClick={() => {
+                  if (files.length) return;
                   const fileInput = document.querySelector(
                     ".file-input-upload",
                   ) as HTMLInputElement;
@@ -620,17 +870,29 @@ export function PrintPage() {
                 onDrop={(e) => {
                   e.preventDefault();
                   e.currentTarget.classList.remove("dragging");
-                  const dropped = e.dataTransfer.files?.[0] ?? null;
-                  void onPickFile(dropped);
+                  const dropped = Array.from(e.dataTransfer.files ?? []);
+                  void onPickFiles(dropped);
                 }}
               >
-                {file ? (
+                {files.length ? (
                   <div className="file-preview">
                     <div className="file-icon">📄</div>
-                    <h4>{file.name}</h4>
+                    <h4>
+                      {files.length === 1
+                        ? files[0].name
+                        : `${files.length} files selected`}
+                    </h4>
                     <p className="file-size">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {formatFileSize(
+                        files.reduce((sum, current) => sum + current.size, 0),
+                      )}{" "}
+                      total
                     </p>
+                    {files.length > 1 ? (
+                      <p className="upload-subtitle">
+                        First file preview: {files[0].name}
+                      </p>
+                    ) : null}
                     <button
                       className="btn-change-file"
                       type="button"
@@ -642,31 +904,107 @@ export function PrintPage() {
                         if (fileInput) fileInput.click();
                       }}
                     >
-                      ✏️ Change File
+                      ✏️ Replace Files
+                    </button>
+                    <button
+                      className="btn-change-file"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const fileInput = document.querySelector(
+                          ".file-input-add-more",
+                        ) as HTMLInputElement;
+                        if (fileInput) fileInput.click();
+                      }}
+                    >
+                      ➕ Add More Files
                     </button>
                     <button
                       className="btn-change-file btn-preview-file"
                       type="button"
-                      disabled={!previewUrl}
-                      onClick={() => {
+                      disabled={!previewUrl || !activePreviewFile}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!activePreviewFile) return;
                         navigate("/print/preview", {
                           state: {
                             fileUrl: previewUrl,
-                            fileName: file.name,
-                            mimeType: file.type,
+                            fileName: activePreviewFile.name,
+                            mimeType: activePreviewFile.type,
                           },
                         });
                       }}
                     >
-                      👁️ See Document
+                      👁️ See Preview File
                     </button>
+
+                    {files.length ? (
+                      <div className="selected-files-list">
+                        <p className="selected-files-title">Selected files</p>
+                        <p className="selected-files-help">
+                          Press and hold, then drag to reorder print sequence.
+                        </p>
+                        <ul>
+                          {files.map((item, index) => (
+                            <li key={`${item.name}-${item.size}-${index}`}>
+                              <button
+                                type="button"
+                                className={`selected-file-chip ${index === previewIndex ? "active" : ""}`}
+                                draggable
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewIndex(index);
+                                }}
+                                onDragStart={(e) => {
+                                  e.stopPropagation();
+                                  setDragIndex(index);
+                                  e.dataTransfer.effectAllowed = "move";
+                                }}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDropOnIndex(index);
+                                }}
+                                onDragEnd={() => setDragIndex(null)}
+                              >
+                                <span className="selected-file-name">
+                                  {index + 1}. {item.name}
+                                </span>
+                                <span className="selected-file-meta">
+                                  {formatFileSize(item.size)}
+                                </span>
+                              </button>
+                              <div className="selected-file-actions">
+                                <button
+                                  type="button"
+                                  className="selected-file-remove"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeFileAtIndex(index);
+                                  }}
+                                  aria-label={`Remove ${item.name}`}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="upload-prompt">
                     <div className="upload-icon">📤</div>
-                    <h4>Drop your file here</h4>
+                    <h4>Drop files here</h4>
                     <p className="upload-subtitle">or click to browse</p>
-                    <p className="file-hints">PDF, DOC, DOCX • Max 50MB</p>
+                    <p className="file-hints">
+                      PDF, DOC, DOCX, JPG, PNG • Up to 50MB each
+                    </p>
                   </div>
                 )}
 
@@ -674,15 +1012,27 @@ export function PrintPage() {
                   type="file"
                   className="file-input-upload"
                   style={{ display: "none" }}
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
                   onChange={(e) => {
-                    const selected = e.target.files?.[0] ?? null;
-                    void onPickFile(selected);
+                    const selected = Array.from(e.target.files ?? []);
+                    void onPickFiles(selected);
+                  }}
+                />
+                <input
+                  type="file"
+                  className="file-input-add-more"
+                  style={{ display: "none" }}
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.files ?? []);
+                    void onAppendFiles(selected);
                   }}
                 />
               </div>
 
-              {!file ? (
+              {!files.length ? (
                 <div
                   className="upload-notes-panel"
                   role="note"
@@ -693,18 +1043,18 @@ export function PrintPage() {
                   </p>
                   <ul>
                     <li>
-                      Document will not format automatically. Make sure layout
+                      Documents will not format automatically. Make sure layout
                       is final.
                     </li>
                     <li>
                       Check margins, page size, and line spacing before upload.
                     </li>
-                    <li>Export to PDF for best print consistency.</li>
+                    <li>You can upload multiple files and they print in upload order.</li>
                   </ul>
                 </div>
               ) : null}
 
-              {file ? (
+              {files.length ? (
                 <div className="upload-actions">
                   <button
                     className="btn-primary btn-next-step"
@@ -723,6 +1073,34 @@ export function PrintPage() {
 
           {step === "configure" || step === "payment" ? (
             <>
+              {files.length ? (
+                <article className="upload-files-summary">
+                  <div className="upload-files-summary-head">
+                    <h3>Uploaded Documents</h3>
+                    <button
+                      type="button"
+                      className="btn-change-file"
+                      onClick={() => setStep("upload")}
+                    >
+                      Edit files
+                    </button>
+                  </div>
+                  <p>
+                    {files.length} file{files.length > 1 ? "s" : ""} selected
+                    ({formatFileSize(
+                      files.reduce((sum, current) => sum + current.size, 0),
+                    )})
+                  </p>
+                  <ul>
+                    {files.map((item, index) => (
+                      <li key={`${item.name}-${item.size}-${index}`}>
+                        {index + 1}. {item.name}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ) : null}
+
               {/* Print Options */}
               <div className="print-options-section animate-rise delay-2">
                 <h3 className="section-title">Print Settings</h3>
@@ -980,12 +1358,14 @@ export function PrintPage() {
 
           {step === "payment" ? (
             <>
-              <p className="print-feedback print-feedback-success">
-                Payment status: {paymentPhaseLabel[paymentPhase]}
-                {payableAmount !== null
-                  ? ` | Payable amount: Rs ${payableAmount.toFixed(2)}`
-                  : ""}
-              </p>
+              {paymentPhase !== "idle" ? (
+                <p className="print-feedback print-feedback-success">
+                  Payment status: {paymentPhaseLabel[paymentPhase]}
+                  {payableAmount !== null
+                    ? ` | Payable amount: Rs ${payableAmount.toFixed(2)}`
+                    : ""}
+                </p>
+              ) : null}
               <button
                 className="btn-primary"
                 type="submit"
@@ -997,12 +1377,51 @@ export function PrintPage() {
           ) : null}
 
           {status ? (
-            <p className="print-feedback print-feedback-success">{status}</p>
+            <p
+              className={`print-feedback ${statusIsWarning ? "print-feedback-warning" : "print-feedback-success"}`}
+            >
+              {status}
+            </p>
           ) : null}
           {error ? (
             <p className="print-feedback print-feedback-error">{error}</p>
           ) : null}
         </form>
+      ) : null}
+
+      {leaveWarningOpen ? (
+        <div
+          className="scan-modal print-leave-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="leave-warning-title"
+          aria-describedby="leave-warning-description"
+        >
+          <article className="scan-modal-card print-leave-modal-card">
+            <div className="print-leave-modal-icon">⚠️</div>
+            <h3 id="leave-warning-title">Leave this page?</h3>
+            <p id="leave-warning-description" className="print-leave-modal-text">
+              Uploaded files will not be saved if you go back. You can return
+              later and upload them again.
+            </p>
+            <div className="print-leave-modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setLeaveWarningOpen(false)}
+              >
+                Stay here
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmLeavePrintFlow}
+              >
+                Leave page
+              </button>
+            </div>
+          </article>
+        </div>
       ) : null}
     </section>
   );

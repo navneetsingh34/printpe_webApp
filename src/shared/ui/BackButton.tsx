@@ -4,12 +4,14 @@ type BackButtonProps = {
   fallbackPath?: string;
   label?: string;
   className?: string;
+  onClick?: () => void;
 };
 
 export function BackButton({
   fallbackPath = "/",
   label = "Back",
   className = "",
+  onClick,
 }: BackButtonProps) {
   const navigate = useNavigate();
 
@@ -18,6 +20,10 @@ export function BackButton({
       type="button"
       className={`back-button ${className}`.trim()}
       onClick={() => {
+        if (onClick) {
+          onClick();
+          return;
+        }
         if (window.history.length > 1) {
           navigate(-1);
           return;
