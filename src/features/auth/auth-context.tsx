@@ -51,6 +51,7 @@ type AuthContextValue = {
   requestPasswordReset: (input: ForgotPasswordInput) => Promise<string>;
   confirmPasswordReset: (input: ResetPasswordInput) => Promise<string>;
   refreshUnreadCount: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -62,6 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUnreadCount = useCallback(async () => {
     const response = await getUnreadCount();
     setUnreadCount(response.unreadCount);
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    const profile = await getMe();
+    setUser(profile);
   }, []);
 
   useEffect(() => {
@@ -159,8 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return response.message ?? "Password reset successfully.";
       },
       refreshUnreadCount,
+      refreshProfile,
     }),
-    [status, user, unreadCount, refreshUnreadCount],
+    [status, user, unreadCount, refreshUnreadCount, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
