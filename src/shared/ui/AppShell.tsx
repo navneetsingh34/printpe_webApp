@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import jsQR from "jsqr";
 import { useAuth } from "../../features/auth/auth-context";
 import { NotificationBellButton } from "./NotificationBellButton";
 
@@ -196,6 +197,34 @@ function resolveShopIdFromScannedValue(value: string): string | null {
   return null;
 }
 
+function detectQrFromVideoFrame(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+): string | null {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+
+  if (!width || !height) {
+    return null;
+  }
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return null;
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+  context.drawImage(video, 0, 0, width, height);
+
+  const imageData = context.getImageData(0, 0, width, height);
+  const code = jsQR(imageData.data, width, height, {
+    inversionAttempts: "attemptBoth",
+  });
+
+  return code?.data ?? null;
+}
+
 export function AppShell() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -204,6 +233,7 @@ export function AppShell() {
   const [scanError, setScanError] = useState("");
   const [scanResult, setScanResult] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -244,20 +274,21 @@ export function AppShell() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
 
-        if (!DetectorCtor) {
-          setScanError("QR scan is not supported in this browser.");
-          return;
-        }
-
-        const detector = new DetectorCtor({ formats: ["qr_code"] });
+        const detector = DetectorCtor ? new DetectorCtor({ formats: ["qr_code"] }) : null;
 
         timer = window.setInterval(async () => {
           if (stopped || !videoRef.current || scanResult) return;
           if (videoRef.current.readyState < 2) return;
 
           try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes.find((entry) => entry.rawValue)?.rawValue;
+            const value = detector
+              ? (await detector.detect(videoRef.current)).find(
+                  (entry) => entry.rawValue,
+                )?.rawValue
+              : canvasRef.current
+              ? detectQrFromVideoFrame(videoRef.current, canvasRef.current)
+              : null;
+
             if (value) {
               const shopId = resolveShopIdFromScannedValue(value);
 
@@ -518,6 +549,7 @@ export function AppShell() {
                 playsInline
                 muted
               />
+              <canvas ref={canvasRef} aria-hidden="true" hidden />
               <div className="scan-frame" aria-hidden="true" />
             </div>
 
