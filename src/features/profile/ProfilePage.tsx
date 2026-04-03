@@ -258,7 +258,6 @@ export function ProfilePage() {
                 </button>
               </div>
             </label>
-
           </div>
 
           {emailChanged && emailOtpRequestedFor === normalizedDraftEmail ? (

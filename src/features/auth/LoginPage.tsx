@@ -6,6 +6,28 @@ import { PrinterLoading } from "../../shared/ui/PrinterLoading";
 import { env } from "../../services/api/env";
 import { GoogleLogoIcon } from "./GoogleLogoIcon";
 
+function resolveOAuthApiBaseUrl() {
+  const configured = env.apiBaseUrl.replace(/\/$/, "");
+
+  try {
+    const configuredUrl = new URL(configured);
+    const currentHost = window.location.hostname;
+    const configuredHost = configuredUrl.hostname;
+    const configuredIsLocal =
+      configuredHost === "localhost" || configuredHost === "127.0.0.1";
+    const currentIsLocal =
+      currentHost === "localhost" || currentHost === "127.0.0.1";
+
+    if (configuredIsLocal && !currentIsLocal) {
+      return `${window.location.origin}/api/v1`;
+    }
+  } catch {
+    // Fall back to configured API base URL.
+  }
+
+  return configured;
+}
+
 export function LoginPage() {
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
@@ -54,7 +76,8 @@ export function LoginPage() {
   const onGoogleLogin = () => {
     setError("");
     const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
-    const oauthStartUrl = `${env.apiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
+    const oauthApiBaseUrl = resolveOAuthApiBaseUrl();
+    const oauthStartUrl = `${oauthApiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
     window.location.href = oauthStartUrl;
   };
 
