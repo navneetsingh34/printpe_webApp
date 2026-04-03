@@ -1,32 +1,33 @@
 import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth-context";
 import { AuthFormLayout } from "./AuthFormLayout";
 import { PrinterLoading } from "../../shared/ui/PrinterLoading";
 
 export function ForgotPasswordPage() {
   const { requestPasswordReset } = useAuth();
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  const navigate = useNavigate();
+  const [email, setEmail] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("email") ?? "";
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setMessage("");
     setError("");
 
-    if (!email.trim()) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
       setError("Enter your email first.");
       return;
     }
 
     setLoading(true);
     try {
-      const text = await requestPasswordReset({
-        email: email.trim().toLowerCase(),
-      });
-      setMessage(text);
+      await requestPasswordReset({ email: normalizedEmail });
+      navigate(`/auth/reset-password?email=${encodeURIComponent(normalizedEmail)}`);
     } catch (e) {
       setError((e as Error).message || "Unable to send OTP.");
     } finally {
@@ -36,7 +37,11 @@ export function ForgotPasswordPage() {
 
   if (loading) {
     return (
-      <AuthFormLayout title="Forgot Password">
+      <AuthFormLayout
+        title="Forgot Password"
+        subtitle="Enter your account email to receive a one-time OTP."
+        variant="recovery"
+      >
         <div className="loader-screen">
           <PrinterLoading />
         </div>
@@ -45,8 +50,12 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <AuthFormLayout title="Forgot Password">
-      <form onSubmit={onSubmit} className="form">
+    <AuthFormLayout
+      title="Forgot Password"
+      subtitle="Enter your account email to receive a one-time OTP."
+      variant="recovery"
+    >
+      <form onSubmit={onSubmit} className="form auth-form">
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -57,9 +66,10 @@ export function ForgotPasswordPage() {
         <button className="btn-primary" type="submit" disabled={loading}>
           Send OTP
         </button>
-        {message ? <p className="success">{message}</p> : null}
         {error ? <p className="error">{error}</p> : null}
-        <Link to="/auth/reset-password">Already have OTP?</Link>
+        <Link to={`/auth/reset-password${email.trim() ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : ""}`}>
+          Already have OTP?
+        </Link>
       </form>
     </AuthFormLayout>
   );

@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
     define: {
       "import.meta.env.API_BASE_URL": JSON.stringify(env.API_BASE_URL ?? ""),
       "import.meta.env.WS_BASE_URL": JSON.stringify(env.WS_BASE_URL ?? ""),
+      "import.meta.env.GOOGLE_WEB_CLIENT_ID": JSON.stringify(
+        env.GOOGLE_WEB_CLIENT_ID ?? "",
+      ),
       "import.meta.env.AUTH_ACCESS_TOKEN_KEY": JSON.stringify(
         env.AUTH_ACCESS_TOKEN_KEY ?? "printq_access_token",
       ),

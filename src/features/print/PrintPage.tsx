@@ -17,7 +17,7 @@ import {
   ShopPricingConfig,
   TieredRate,
 } from "../../shared/types/shop";
-import { PrinterLoading } from "../../shared/ui/PrinterLoading";
+import { BackButton } from "../../shared/ui/BackButton";
 
 type PrintStep = "intro" | "upload" | "configure" | "payment";
 type PaymentPhase =
@@ -197,7 +197,6 @@ export function PrintPage() {
   const [pricing, setPricing] = useState<ShopPricingConfig>(defaultPricing());
   const [pricingLoadError, setPricingLoadError] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [uploadedFileId, setUploadedFileId] = useState("");
   const [filePages, setFilePages] = useState(1);
   const [copies, setCopies] = useState(1);
   const [color, setColor] = useState(false);
@@ -206,16 +205,14 @@ export function PrintPage() {
   const [binding, setBinding] = useState("none");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [createdJobId, setCreatedJobId] = useState("");
-  const [createdJobNumber, setCreatedJobNumber] = useState("");
   const [paymentPhase, setPaymentPhase] = useState<PaymentPhase>("idle");
   const [payableAmount, setPayableAmount] = useState<number | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
 
   const paymentPhaseLabel: Record<PaymentPhase, string> = {
     idle: "Ready to pay",
-    creating_job: "Creating print job",
+    creating_job: "Uploading document and creating print job",
     creating_order: "Creating payment order",
     opening_checkout: "Opening Razorpay checkout",
     verifying_payment: "Verifying payment",
@@ -223,18 +220,29 @@ export function PrintPage() {
     failed: "Payment failed",
   };
 
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl("");
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(file);
+    setPreviewUrl(nextUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [file]);
+
   const resetFlow = () => {
     setStep("intro");
     setFile(null);
-    setUploadedFileId("");
     setFilePages(1);
     setCopies(1);
     setColor(false);
     setDoubleSided(false);
     setPaperSize(paperOptions[0] ?? "A4");
     setBinding(bindingOptions.find((item) => item.id === "none")?.id ?? "none");
-    setCreatedJobId("");
-    setCreatedJobNumber("");
     setPaymentPhase("idle");
     setPayableAmount(null);
   };
@@ -342,7 +350,6 @@ export function PrintPage() {
     setStatus("");
     if (!nextFile) {
       setFile(null);
-      setUploadedFileId("");
       return;
     }
 
@@ -353,32 +360,16 @@ export function PrintPage() {
       return;
     }
 
-    setIsUploading(true);
     setFile(nextFile);
-    setCreatedJobId("");
-    setCreatedJobNumber("");
     setPayableAmount(null);
-    try {
-      const uploaded = await uploadDocument(nextFile);
-      setUploadedFileId(uploaded.id);
-      setFilePages(
-        Number(uploaded.pageCount) > 0 ? Number(uploaded.pageCount) : 1,
-      );
-      setStatus("Document uploaded and ready for configuration.");
-      setStep("configure");
-    } catch (e) {
-      setFile(null);
-      setUploadedFileId("");
-      setError((e as Error).message || "Unable to upload selected file.");
-      setStatus("");
-    } finally {
-      setIsUploading(false);
-    }
+    setFilePages(1);
+    setStatus("Document selected. Preview it before payment.");
+    setStep("configure");
   };
 
   const proceedToPayment = () => {
     if (!file) {
-      setError("Please upload a document before continuing.");
+      setError("Please select a document before continuing.");
       return;
     }
     setError("");
@@ -389,7 +380,7 @@ export function PrintPage() {
     event.preventDefault();
     setError("");
     setStatus("");
-    if (!file || !shopId || !selectedPaper || !uploadedFileId) {
+    if (!file || !shopId || !selectedPaper) {
       setError("Select a shop and document first.");
       return;
     }
@@ -411,35 +402,44 @@ export function PrintPage() {
 
     setIsSubmitting(true);
     let currentOrderId = "";
-    try {
-      let currentJobId = createdJobId;
-      let currentJobNumber = createdJobNumber;
+    let uploadedFileId: string | null = null;
+    let resolvedPages = filePages;
 
+    const createJobForCapturedPayment = async (orderId: string) => {
       setPaymentPhase("creating_job");
-      setStatus("Creating print job...");
+      setStatus("Uploading document and creating print job...");
 
-      if (!currentJobId) {
-        const printJob = await createPrintJob({
-          shopId,
-          fileId: uploadedFileId,
-          totalPages: filePages,
-          printOptions: {
-            copies,
-            color,
-            doubleSided,
-            paperSize,
-            binding: binding || undefined,
-          },
-        });
-        currentJobId = printJob.id;
-        currentJobNumber = printJob.jobNumber;
-        setCreatedJobId(printJob.id);
-        setCreatedJobNumber(printJob.jobNumber);
+      if (!uploadedFileId) {
+        const uploaded = await uploadDocument(file);
+        uploadedFileId = uploaded.id;
+        resolvedPages =
+          Number(uploaded.pageCount) > 0 ? Number(uploaded.pageCount) : filePages;
+        setFilePages(resolvedPages);
       }
 
+      await createPrintJob({
+        shopId,
+        fileId: uploadedFileId,
+        totalPages: resolvedPages,
+        paymentOrderId: orderId,
+        printOptions: {
+          copies,
+          color,
+          doubleSided,
+          paperSize,
+          binding: binding || undefined,
+        },
+      });
+    };
+
+    try {
       setPaymentPhase("creating_order");
       setStatus("Creating payment order...");
-      const order = await createPaymentOrder(currentJobId);
+      const order = await createPaymentOrder({
+        estimatedPrintCost: estimate.total,
+        shopId,
+        description: file.name,
+      });
       currentOrderId = order.orderId;
       if (typeof order.totalAmount === "number") {
         setPayableAmount(order.totalAmount);
@@ -454,7 +454,7 @@ export function PrintPage() {
         amount: order.amount,
         currency: order.currency || "INR",
         name: env.razorpayMerchantName || "PrintQ",
-        description: `Print order ${currentJobNumber || order.jobNumber || "PrintQ"}`,
+        description: `Print order ${order.jobNumber || "PrintQ"}`,
         orderId: order.orderId,
         prefill: {
           name: [user?.firstName, user?.lastName].filter(Boolean).join(" "),
@@ -476,6 +476,8 @@ export function PrintPage() {
         razorpaySignature: paymentResult.razorpay_signature,
       });
 
+      await createJobForCapturedPayment(currentOrderId);
+
       setStatus("Payment successful. Your print request is now in queue.");
       resetFlow();
       navigate("/orders");
@@ -492,6 +494,7 @@ export function PrintPage() {
           const payment =
             reconciled.payment ?? (await getPaymentByOrderId(currentOrderId));
           if (payment.status === "captured") {
+            await createJobForCapturedPayment(currentOrderId);
             setStatus("Payment confirmed. Your print request is now in queue.");
             resetFlow();
             navigate("/orders");
@@ -514,18 +517,12 @@ export function PrintPage() {
     }
   };
 
-  if (isUploading) {
-    return (
-      <section className="page-animate print-page">
-        <div className="loader-screen">
-          <PrinterLoading />
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section className="page-animate print-page">
+      <div className="page-topbar">
+        <BackButton fallbackPath="/" label="Back" />
+      </div>
+
       <div className="print-header animate-rise delay-1">
         <h2>Print Flow</h2>
         <p className="print-header-subtitle">
@@ -647,6 +644,22 @@ export function PrintPage() {
                     >
                       ✏️ Change File
                     </button>
+                    <button
+                      className="btn-change-file btn-preview-file"
+                      type="button"
+                      disabled={!previewUrl}
+                      onClick={() => {
+                        navigate("/print/preview", {
+                          state: {
+                            fileUrl: previewUrl,
+                            fileName: file.name,
+                            mimeType: file.type,
+                          },
+                        });
+                      }}
+                    >
+                      👁️ See Document
+                    </button>
                   </div>
                 ) : (
                   <div className="upload-prompt">
@@ -692,16 +705,18 @@ export function PrintPage() {
               ) : null}
 
               {file ? (
-                <button
-                  className="btn-primary btn-next-step"
-                  type="button"
-                  onClick={() => setStep("configure")}
-                >
-                  <span>Continue to Configure</span>
-                  <span aria-hidden="true" className="btn-next-step-arrow">
-                    →
-                  </span>
-                </button>
+                <div className="upload-actions">
+                  <button
+                    className="btn-primary btn-next-step"
+                    type="button"
+                    onClick={() => setStep("configure")}
+                  >
+                    <span>Continue to Configure</span>
+                    <span aria-hidden="true" className="btn-next-step-arrow">
+                      →
+                    </span>
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : null}

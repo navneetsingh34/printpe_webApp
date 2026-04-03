@@ -1,11 +1,15 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth-context";
 import { AuthFormLayout } from "./AuthFormLayout";
 import { PrinterLoading } from "../../shared/ui/PrinterLoading";
+import { env } from "../../services/api/env";
+import { GoogleLogoIcon } from "./GoogleLogoIcon";
+
+const consentStorageKey = "printpe.signup.acceptedTerms";
 
 export function RegisterPage() {
-  const { signUp } = useAuth();
+  const { registerWithGoogle, signUp } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     firstName: "",
@@ -15,8 +19,75 @@ export function RegisterPage() {
     password: "",
     confirmPassword: "",
   });
+  const [acceptedTerms, setAcceptedTerms] = useState(
+    () => window.sessionStorage.getItem(consentStorageKey) === "true",
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const hashParams = new URLSearchParams(
+      window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "",
+    );
+    const idTokenFromHash = hashParams.get("id_token")?.trim();
+    const oauthError = hashParams.get("error")?.trim();
+
+    if (!idTokenFromHash && !oauthError) {
+      return;
+    }
+
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+
+    if (oauthError) {
+      setError(`Google signup failed: ${oauthError}`);
+      return;
+    }
+
+    if (!idTokenFromHash) {
+      setError("Google signup failed. Missing ID token.");
+      return;
+    }
+
+    if (!window.sessionStorage.getItem(consentStorageKey)) {
+      setError(
+        "Please accept the terms and privacy policy before continuing with Google.",
+      );
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    void registerWithGoogle({ idToken: idTokenFromHash, acceptedTerms: true })
+      .then(() => {
+        window.sessionStorage.removeItem(consentStorageKey);
+        navigate("/");
+      })
+      .catch((e: unknown) => {
+        setError((e as Error).message || "Google signup failed.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [navigate, registerWithGoogle]);
+
+  const onGoogleSignUp = () => {
+    setError("");
+    if (!acceptedTerms) {
+      setError(
+        "Please accept the terms and privacy policy before continuing with Google.",
+      );
+      return;
+    }
+
+    window.sessionStorage.setItem(consentStorageKey, "true");
+    const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    const oauthStartUrl = `${env.apiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
+    window.location.href = oauthStartUrl;
+  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -39,18 +110,28 @@ export function RegisterPage() {
       setError("Passwords do not match.");
       return;
     }
+    if (!acceptedTerms) {
+      setError(
+        "Please accept the terms and privacy policy to create an account.",
+      );
+      return;
+    }
 
     setLoading(true);
     try {
-      await signUp({
+      const response = await signUp({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         phone: form.phone.trim() || undefined,
         email: form.email.trim().toLowerCase(),
         password: form.password,
         role: "user",
+        acceptedTerms,
       });
-      navigate("/");
+      window.sessionStorage.removeItem(consentStorageKey);
+      navigate(
+        `/auth/verify-email?email=${encodeURIComponent(response.user.email)}`,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -61,6 +142,7 @@ export function RegisterPage() {
   if (loading) {
     return (
       <AuthFormLayout
+        variant="signup"
         title="Create Account"
         subtitle="Create your PrintPe account in less than a minute."
       >
@@ -73,6 +155,7 @@ export function RegisterPage() {
 
   return (
     <AuthFormLayout
+      variant="signup"
       title="Create Account"
       subtitle="Create your PrintPe account in less than a minute."
     >
@@ -115,9 +198,41 @@ export function RegisterPage() {
             setForm((p) => ({ ...p, confirmPassword: e.target.value }))
           }
         />
+        <label className="auth-consent">
+          <input
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setAcceptedTerms(next);
+              if (next) {
+                window.sessionStorage.setItem(consentStorageKey, "true");
+              } else {
+                window.sessionStorage.removeItem(consentStorageKey);
+              }
+            }}
+          />
+          <span>
+            I agree to the Terms and Privacy Policy before creating my account.
+          </span>
+        </label>
         {error ? <p className="error">{error}</p> : null}
         <button className="btn-primary" type="submit" disabled={loading}>
           Create PrintPe account
+        </button>
+        <div className="auth-or-divider" role="separator" aria-label="or">
+          <span>or</span>
+        </div>
+        <button
+          className="btn-secondary"
+          type="button"
+          onClick={onGoogleSignUp}
+          disabled={loading || !acceptedTerms}
+        >
+          <span className="btn-with-icon">
+            <GoogleLogoIcon />
+            <span>Continue with Google</span>
+          </span>
         </button>
         <p className="auth-footnote">
           Already have account? <Link to="/auth/login">Login</Link>

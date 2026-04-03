@@ -15,6 +15,9 @@ import {
 } from "../../services/realtime/shopStatusSocket";
 import type { Socket } from "socket.io-client";
 
+const SEARCH_DEBOUNCE_MS = 300;
+const MIN_SEARCH_LENGTH = 3;
+
 function formatDistance(distance?: number): string {
   if (distance === undefined || Number.isNaN(distance)) return "";
   if (distance < 1) return `${Math.round(distance * 1000)} m away`;
@@ -36,15 +39,25 @@ export function HomePage() {
   const [shopOnlineMap, setShopOnlineMap] = useState<Record<string, boolean>>(
     {},
   );
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
-  const loadAll = async () => {
-    setLoading(true);
+  const loadAll = async (searchQuery?: string, isInitial = false) => {
+    if (isInitial) {
+      setLoading(true);
+    }
     setError("");
-    await (query.trim() ? searchShops(query.trim()) : getAllShops())
+    const finalQuery = searchQuery !== undefined ? searchQuery : query;
+    await (finalQuery.trim().length >= MIN_SEARCH_LENGTH
+      ? searchShops(finalQuery.trim())
+      : getAllShops())
       .then((result) => setShops(result))
       .catch((e) => setError((e as Error).message || "Failed to load shops"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isInitial) {
+          setLoading(false);
+        }
+      });
   };
 
   const loadNearby = async (coords?: { lat: number; lng: number }) => {
@@ -99,12 +112,44 @@ export function HomePage() {
 
   useEffect(() => {
     if (mode === "all") {
-      void loadAll();
+      void loadAll(undefined, true);
       return;
     }
     void loadNearby();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Debounced search effect for real-time search
+  useEffect(() => {
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // If query is less than min length, load all shops
+    if (query.trim().length < MIN_SEARCH_LENGTH) {
+      debounceTimerRef.current = setTimeout(() => {
+        if (mode === "all") {
+          void loadAll("");
+        }
+      }, SEARCH_DEBOUNCE_MS);
+      return;
+    }
+
+    // Debounce the search call
+    debounceTimerRef.current = setTimeout(() => {
+      if (mode === "all") {
+        void loadAll(query);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, mode]);
 
   useEffect(() => {
     let mounted = true;
@@ -162,14 +207,14 @@ export function HomePage() {
         }
         return;
       }
-      void loadAll();
+      void loadAll(undefined, false);
     }, 45000);
 
     return () => {
       window.clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, latLng, query]);
+  }, [mode, latLng]);
 
   const visibleShops = useMemo(
     () => (mode === "all" ? shops : nearbyShops),
@@ -191,18 +236,6 @@ export function HomePage() {
 
   const featuredShops = useMemo(() => sortedShops.slice(0, 2), [sortedShops]);
   const otherShops = useMemo(() => sortedShops.slice(2), [sortedShops]);
-
-  const onSearchSubmit = async () => {
-    if (mode === "nearby") {
-      if (latLng) {
-        await loadNearby(latLng);
-      } else {
-        await loadNearby();
-      }
-      return;
-    }
-    await loadAll();
-  };
 
   if (loading || locating) {
     return (
@@ -232,22 +265,23 @@ export function HomePage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void onSearchSubmit();
-              }
-            }}
             placeholder="Search for a shop..."
             className="search-input"
           />
-          <button
-            className="btn-primary search-btn"
-            type="button"
-            onClick={() => void onSearchSubmit()}
+          <svg
+            className="search-icon"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <span>→</span>
-          </button>
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
         </div>
 
         <div className="mode-toggle">

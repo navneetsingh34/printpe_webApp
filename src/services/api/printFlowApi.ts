@@ -13,6 +13,7 @@ export type CreatePrintJobInput = {
   shopId: string;
   fileId: string;
   totalPages: number;
+  paymentOrderId?: string;
   printOptions: {
     copies: number;
     color: boolean;
@@ -40,6 +41,14 @@ export type PaymentOrderResult = {
   convenienceFee?: number;
   totalAmount?: number;
 };
+
+export type CreatePaymentOrderInput =
+  | { printJobId: string }
+  | {
+      estimatedPrintCost: number;
+      shopId: string;
+      description?: string;
+    };
 
 export type VerifyPaymentInput = {
   razorpayOrderId: string;
@@ -83,13 +92,13 @@ export function createPrintJob(
 }
 
 export function createPaymentOrder(
-  printJobId: string,
+  input: CreatePaymentOrderInput,
 ): Promise<PaymentOrderResult> {
   return apiRequest(
     "/payments/create-order",
     {
       method: "POST",
-      body: JSON.stringify({ printJobId }),
+      body: JSON.stringify(input),
     },
     { auth: true },
   );

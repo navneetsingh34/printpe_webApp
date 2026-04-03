@@ -1,21 +1,52 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { forgotPassword, getMe, login, register, resetPassword } from '../../services/api/authApi';
-import { getUnreadCount } from '../../services/api/notificationsApi';
-import { clearTokenBundle, getTokenBundle, setTokenBundle } from '../../services/storage/tokenStorage';
-import { AuthUser, ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from '../../shared/types/auth';
-import { connectNotificationsSocket } from '../../services/realtime/notificationsSocket';
-import { connectOrderTrackingSocket } from '../../services/realtime/orderTrackingSocket';
-import { connectShopStatusSocket } from '../../services/realtime/shopStatusSocket';
-import type { Socket } from 'socket.io-client';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  forgotPassword,
+  getMe,
+  googleLogin,
+  login,
+  register,
+  registerWithGoogle,
+  resetPassword,
+} from "../../services/api/authApi";
+import { getUnreadCount } from "../../services/api/notificationsApi";
+import {
+  clearTokenBundle,
+  getTokenBundle,
+  setTokenBundle,
+} from "../../services/storage/tokenStorage";
+import {
+  AuthUser,
+  ForgotPasswordInput,
+  GoogleLoginInput,
+  GoogleRegisterInput,
+  LoginInput,
+  RegisterResponse,
+  RegisterInput,
+  ResetPasswordInput,
+} from "../../shared/types/auth";
+import { connectNotificationsSocket } from "../../services/realtime/notificationsSocket";
+import { connectOrderTrackingSocket } from "../../services/realtime/orderTrackingSocket";
+import { connectShopStatusSocket } from "../../services/realtime/shopStatusSocket";
+import type { Socket } from "socket.io-client";
 
-type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
+type AuthStatus = "loading" | "signedOut" | "signedIn";
 type AuthContextValue = {
   status: AuthStatus;
   user: AuthUser | null;
   unreadCount: number;
   signIn: (input: LoginInput) => Promise<void>;
-  signUp: (input: RegisterInput) => Promise<void>;
+  signInWithGoogle: (input: GoogleLoginInput) => Promise<void>;
+  registerWithGoogle: (input: GoogleRegisterInput) => Promise<void>;
+  signUp: (input: RegisterInput) => Promise<RegisterResponse>;
   signOut: () => Promise<void>;
   requestPasswordReset: (input: ForgotPasswordInput) => Promise<string>;
   confirmPasswordReset: (input: ResetPasswordInput) => Promise<string>;
@@ -25,7 +56,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const refreshUnreadCount = useCallback(async () => {
@@ -42,18 +73,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const tokens = await getTokenBundle();
         if (!tokens?.accessToken) {
-          setStatus('signedOut');
+          setStatus("signedOut");
           return;
         }
         const profile = await getMe();
         setUser(profile);
-        setStatus('signedIn');
+        setStatus("signedIn");
         void refreshUnreadCount().catch(() => setUnreadCount(0));
 
         notificationsSocket = connectNotificationsSocket(tokens.accessToken, {
           onNotification: () => setUnreadCount((prev) => prev + 1),
           onUnreadCount: (payload) => {
-            const next = typeof payload.count === 'number' ? payload.count : 0;
+            const next = typeof payload.count === "number" ? payload.count : 0;
             setUnreadCount(next);
           },
         });
@@ -63,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearTokenBundle();
         setUser(null);
         setUnreadCount(0);
-        setStatus('signedOut');
+        setStatus("signedOut");
       }
     };
     void bootstrap();
@@ -82,30 +113,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unreadCount,
       signIn: async (input) => {
         const response = await login(input);
-        await setTokenBundle({ accessToken: response.accessToken, refreshToken: response.refreshToken });
+        await setTokenBundle({
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+        });
         setUser(response.user);
         setUnreadCount(0);
-        setStatus('signedIn');
+        setStatus("signedIn");
+      },
+      signInWithGoogle: async (input) => {
+        const response = await googleLogin(input);
+        await setTokenBundle({
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+        });
+        setUser(response.user);
+        setUnreadCount(0);
+        setStatus("signedIn");
+      },
+      registerWithGoogle: async (input) => {
+        const response = await registerWithGoogle(input);
+        await setTokenBundle({
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+        });
+        setUser(response.user);
+        setUnreadCount(0);
+        setStatus("signedIn");
       },
       signUp: async (input) => {
-        const response = await register(input);
-        await setTokenBundle({ accessToken: response.accessToken, refreshToken: response.refreshToken });
-        setUser(response.user);
-        setStatus('signedIn');
+        return register(input);
       },
       signOut: async () => {
         await clearTokenBundle();
         setUser(null);
         setUnreadCount(0);
-        setStatus('signedOut');
+        setStatus("signedOut");
       },
       requestPasswordReset: async (input) => {
         const response = await forgotPassword(input);
-        return response.message ?? 'OTP sent successfully.';
+        return response.message ?? "OTP sent successfully.";
       },
       confirmPasswordReset: async (input) => {
         const response = await resetPassword(input);
-        return response.message ?? 'Password reset successfully.';
+        return response.message ?? "Password reset successfully.";
       },
       refreshUnreadCount,
     }),
@@ -117,6 +168,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  if (!context) throw new Error("useAuth must be used inside AuthProvider");
   return context;
 }

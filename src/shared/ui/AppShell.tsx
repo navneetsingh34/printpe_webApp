@@ -145,6 +145,57 @@ function renderTabIcon(path: string) {
   );
 }
 
+const SHOP_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function resolveShopIdFromScannedValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (SHOP_ID_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as
+      | { shopId?: unknown }
+      | { url?: unknown }
+      | Record<string, unknown>;
+
+    if ("shopId" in parsed) {
+      const shopId = parsed.shopId;
+      if (typeof shopId === "string" && SHOP_ID_PATTERN.test(shopId.trim())) {
+        return shopId.trim();
+      }
+    }
+
+    if ("url" in parsed) {
+      const urlValue = parsed.url;
+      if (typeof urlValue === "string") {
+        const url = new URL(urlValue);
+        const queryShopId = url.searchParams.get("shopId")?.trim();
+        if (queryShopId && SHOP_ID_PATTERN.test(queryShopId)) {
+          return queryShopId;
+        }
+      }
+    }
+  } catch {
+    // Fall through to URL and plain-text handling below.
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const queryShopId = url.searchParams.get("shopId")?.trim();
+    if (queryShopId && SHOP_ID_PATTERN.test(queryShopId)) {
+      return queryShopId;
+    }
+  } catch {
+    // Not a URL.
+  }
+
+  return null;
+}
+
 export function AppShell() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -208,7 +259,21 @@ export function AppShell() {
             const codes = await detector.detect(videoRef.current);
             const value = codes.find((entry) => entry.rawValue)?.rawValue;
             if (value) {
+              const shopId = resolveShopIdFromScannedValue(value);
+
+              if (shopId) {
+                stopped = true;
+                if (timer) window.clearInterval(timer);
+                setScanResult(value);
+                setScannerOpen(false);
+                navigate(`/print?shopId=${encodeURIComponent(shopId)}`);
+                return;
+              }
+
               setScanResult(value);
+              setScanError(
+                "This QR code does not contain a valid shop ID.",
+              );
             }
           } catch {
             // Ignore transient detection errors while camera is active.
