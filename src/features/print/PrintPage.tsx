@@ -253,10 +253,6 @@ export function PrintPage() {
   const statusIsWarning = status.toLowerCase().includes("already uploaded");
 
   const activePreviewFile = files[previewIndex] ?? files[0] ?? null;
-  const totalSelectedSizeMb = useMemo(
-    () => files.reduce((sum, current) => sum + current.size, 0) / 1024 / 1024,
-    [files],
-  );
 
   const paymentPhaseLabel: Record<PaymentPhase, string> = {
     idle: "Ready to pay",
