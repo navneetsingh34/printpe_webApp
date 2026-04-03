@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import jsQR from "jsqr";
 import { useAuth } from "../../features/auth/auth-context";
 import { NotificationBellButton } from "./NotificationBellButton";
@@ -9,6 +9,8 @@ const tabs = [
   { to: "/orders", label: "Orders" },
   { to: "/profile", label: "Profile" },
 ];
+
+const desktopTabs = tabs.filter((tab) => tab.to !== "/profile");
 
 function renderTabIcon(path: string) {
   if (path === "/") {
@@ -227,6 +229,7 @@ function detectQrFromVideoFrame(
 
 export function AppShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -330,6 +333,21 @@ export function AppShell() {
     };
   }, [scannerOpen, scanResult]);
 
+  const isTabActive = (path: string) => {
+    if (path === "/") {
+      return location.pathname === "/";
+    }
+    return (
+      location.pathname === path || location.pathname.startsWith(`${path}/`)
+    );
+  };
+
+  const navigateTab = (path: string) => {
+    if (!isTabActive(path)) {
+      navigate(path);
+    }
+  };
+
   return (
     <div className="app-shell">
       <header
@@ -407,18 +425,18 @@ export function AppShell() {
         <div className="nav-right">
           <nav className="desktop-nav">
             <div className="desktop-nav-track">
-              {tabs.map((tab) => (
-                <NavLink
+              {desktopTabs.map((tab) => (
+                <button
                   key={`desktop-${tab.to}`}
-                  to={tab.to}
-                  end={tab.to === "/"}
-                  className={({ isActive }) =>
-                    isActive ? "nav-link active" : "nav-link"
+                  type="button"
+                  className={
+                    isTabActive(tab.to) ? "nav-link active" : "nav-link"
                   }
+                  onClick={() => navigateTab(tab.to)}
                 >
                   {tab.label}
                   <span className="nav-link-underline" />
-                </NavLink>
+                </button>
               ))}
             </div>
             <button
@@ -429,12 +447,17 @@ export function AppShell() {
               Alerts
             </button>
           </nav>
-          <div className="nav-user-pill" aria-label="Current user">
+          <button
+            className="nav-user-pill nav-user-pill-btn"
+            type="button"
+            aria-label="Open profile"
+            onClick={() => navigate("/profile")}
+          >
             <span className="nav-user-avatar">
               {(user?.firstName?.[0] ?? "U").toUpperCase()}
             </span>
             <span className="nav-user-name">{user?.firstName ?? "User"}</span>
-          </div>
+          </button>
           <div className="mobile-action">
             <button
               type="button"
@@ -588,17 +611,17 @@ export function AppShell() {
       </main>
       <nav className="tab-nav mobile-tab-nav">
         {tabs.map((tab) => (
-          <NavLink
+          <button
             key={tab.to}
-            to={tab.to}
-            end={tab.to === "/"}
-            className={({ isActive }) => (isActive ? "tab active" : "tab")}
+            type="button"
+            className={isTabActive(tab.to) ? "tab active" : "tab"}
+            onClick={() => navigateTab(tab.to)}
           >
             <span className="tab-icon" aria-hidden="true">
               {renderTabIcon(tab.to)}
             </span>
             <span className="tab-label">{tab.label}</span>
-          </NavLink>
+          </button>
         ))}
       </nav>
     </div>

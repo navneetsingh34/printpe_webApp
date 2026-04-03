@@ -27,14 +27,24 @@ export function ProfilePage() {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
   const role = user?.role ?? "user";
+  const normalizedCurrentFirstName = (user?.firstName ?? "").trim();
+  const normalizedCurrentLastName = (user?.lastName ?? "").trim();
+  const normalizedNextFirstName = firstName.trim();
+  const normalizedNextLastName = lastName.trim();
+  const hasNameChanges =
+    normalizedNextFirstName !== normalizedCurrentFirstName ||
+    normalizedNextLastName !== normalizedCurrentLastName;
+  const canSave =
+    hasNameChanges &&
+    Boolean(normalizedNextFirstName && normalizedNextLastName);
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     setMessage("");
 
-    const nextFirstName = firstName.trim();
-    const nextLastName = lastName.trim();
+    const nextFirstName = normalizedNextFirstName;
+    const nextLastName = normalizedNextLastName;
 
     if (!nextFirstName || !nextLastName) {
       setError("First and last name are required.");
@@ -56,13 +66,6 @@ export function ProfilePage() {
 
         await refreshProfile();
         nextMessages.push("Profile updated successfully.");
-      }
-
-      if (
-        nextFirstName === (user?.firstName ?? "") &&
-        nextLastName === (user?.lastName ?? "")
-      ) {
-        nextMessages.push("No changes to save.");
       }
 
       if (nextMessages.length > 0) {
@@ -147,7 +150,7 @@ export function ProfilePage() {
             <button
               className="btn-primary profile-signout-btn"
               type="submit"
-              disabled={saving}
+              disabled={saving || !canSave}
             >
               {saving ? "Saving..." : "Save changes"}
             </button>

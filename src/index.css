@@ -407,6 +407,23 @@ h4 {
   box-shadow: 0 4px 10px rgba(251, 141, 52, 0.12);
 }
 
+.nav-user-pill-btn {
+  cursor: pointer;
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  transition:
+    transform 180ms var(--ease-pop),
+    box-shadow 180ms var(--ease-standard),
+    border-color 180ms var(--ease-standard);
+}
+
+.nav-user-pill-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(251, 141, 52, 0.5);
+  box-shadow: 0 8px 16px rgba(251, 141, 52, 0.2);
+}
+
 .nav-user-avatar {
   width: 24px;
   height: 24px;
@@ -758,6 +775,10 @@ a:focus-visible {
   font-weight: 700;
   font-size: 11px;
   letter-spacing: 0.1px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
   transition:
     transform 180ms var(--ease-pop),
     background-color 180ms var(--ease-standard),
@@ -3338,6 +3359,36 @@ a:focus-visible {
   color: var(--text);
 }
 
+.order-details-page {
+  display: grid;
+  gap: 10px;
+}
+
+.order-details-backbar {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.order-details-page .order-detail-modal-card {
+  margin-top: 2px;
+}
+
+.order-details-page .order-detail-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.order-details-page .order-detail-grid p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.order-details-page .order-detail-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
 /* Premium Progress Section */
 .progress-section-premium {
   padding: 16px 0;
@@ -4044,7 +4095,46 @@ a:focus-visible {
   min-height: 100dvh;
   padding: 26px 14px;
   display: grid;
-  place-items: center;
+  align-content: start;
+  justify-items: center;
+  gap: 16px;
+}
+
+.auth-top-nav {
+  width: min(1160px, 100%);
+}
+
+.auth-top-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-top-links .nav-link {
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 180ms var(--ease-standard),
+    background-color 180ms var(--ease-standard),
+    box-shadow 180ms var(--ease-standard),
+    transform 180ms var(--ease-pop);
+}
+
+.auth-top-links .nav-link:hover {
+  color: #4b5563;
+}
+
+.auth-top-links .nav-link.active {
+  color: #fff;
+  background: #f8923f;
+  box-shadow: 0 10px 22px rgba(248, 146, 63, 0.35);
 }
 
 .auth-card-single {

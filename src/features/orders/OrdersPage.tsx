@@ -504,11 +504,25 @@ export function OrdersPage() {
 
                   {/* Action Buttons */}
                   <div className="order-actions">
-                    <button className="action-btn secondary" type="button">
+                    <button
+                      className="action-btn secondary"
+                      type="button"
+                      onClick={() =>
+                        navigate(`/orders/${encodeURIComponent(order.id)}`, {
+                          state: {
+                            order,
+                            queueInfo: queueMap[order.id] ?? {
+                              position: order.queuePosition ?? null,
+                              estimatedMinutes:
+                                queueMap[order.id]?.estimatedMinutes ??
+                                order.queuePosition ??
+                                null,
+                            },
+                          },
+                        })
+                      }
+                    >
                       📋 View Details
-                    </button>
-                    <button className="action-btn" type="button">
-                      ⚠️ Report Order
                     </button>
                   </div>
                 </article>
@@ -532,6 +546,8 @@ export function OrdersPage() {
           {oldOrders.map((order) => {
             const displayStatus = normalizeTrackingStatus(order.status);
             const statusConfig = STATUS_CONFIG[displayStatus];
+            const estimatedMinutes =
+              queueMap[order.id]?.estimatedMinutes ?? order.queuePosition;
 
             return (
               <article
@@ -559,6 +575,25 @@ export function OrdersPage() {
                   <span className="meta-label">Total:</span>{" "}
                   {formatCurrency(order.totalPrice)}
                 </p>
+                <div className="order-actions">
+                  <button
+                    className="action-btn secondary"
+                    type="button"
+                    onClick={() =>
+                      navigate(`/orders/${encodeURIComponent(order.id)}`, {
+                        state: {
+                          order,
+                          queueInfo: queueMap[order.id] ?? {
+                            position: order.queuePosition ?? null,
+                            estimatedMinutes,
+                          },
+                        },
+                      })
+                    }
+                  >
+                    📋 View Details
+                  </button>
+                </div>
               </article>
             );
           })}
