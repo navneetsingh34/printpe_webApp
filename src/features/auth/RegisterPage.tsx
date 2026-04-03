@@ -8,28 +8,6 @@ import { GoogleLogoIcon } from "./GoogleLogoIcon";
 
 const consentStorageKey = "printpe.signup.acceptedTerms";
 
-function resolveOAuthApiBaseUrl() {
-  const configured = env.apiBaseUrl.replace(/\/$/, "");
-
-  try {
-    const configuredUrl = new URL(configured);
-    const currentHost = window.location.hostname;
-    const configuredHost = configuredUrl.hostname;
-    const configuredIsLocal =
-      configuredHost === "localhost" || configuredHost === "127.0.0.1";
-    const currentIsLocal =
-      currentHost === "localhost" || currentHost === "127.0.0.1";
-
-    if (configuredIsLocal && !currentIsLocal) {
-      return `${window.location.origin}/api/v1`;
-    }
-  } catch {
-    // Fall back to configured API base URL.
-  }
-
-  return configured;
-}
-
 export function RegisterPage() {
   const { registerWithGoogle, signUp } = useAuth();
   const navigate = useNavigate();
@@ -107,7 +85,7 @@ export function RegisterPage() {
 
     window.sessionStorage.setItem(consentStorageKey, "true");
     const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
-    const oauthApiBaseUrl = resolveOAuthApiBaseUrl();
+    const oauthApiBaseUrl = env.apiBaseUrl.replace(/\/$/, "");
     const oauthStartUrl = `${oauthApiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
     window.location.href = oauthStartUrl;
   };
