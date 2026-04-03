@@ -48,7 +48,11 @@ export function LoginPage() {
       return;
     }
 
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
 
     if (oauthError) {
       setError(`Google login failed: ${oauthError}`);
@@ -149,7 +153,12 @@ export function LoginPage() {
         <div className="auth-or-divider" role="separator" aria-label="or">
           <span>or</span>
         </div>
-        <button type="button" className="btn-secondary" onClick={onGoogleLogin} disabled={loading}>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={onGoogleLogin}
+          disabled={loading}
+        >
           <span className="btn-with-icon">
             <GoogleLogoIcon />
             <span>Continue with Google</span>
