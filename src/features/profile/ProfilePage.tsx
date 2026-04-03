@@ -171,7 +171,11 @@ export function ProfilePage() {
         setMessage(nextMessages.join(" "));
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to update profile.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to update profile.",
+      );
     } finally {
       setSaving(false);
     }
@@ -249,35 +253,17 @@ export function ProfilePage() {
                   {requestingEmailOtp
                     ? "Sending..."
                     : emailOtpRequestedFor === normalizedDraftEmail
-                    ? "Resend"
-                    : "Verify"}
+                      ? "Resend"
+                      : "Verify"}
                 </button>
               </div>
             </label>
 
-            <div className="profile-field">
-              <p className="profile-label">Role</p>
-              <p className="profile-value profile-role-text">{role}</p>
-            </div>
-
-            <div className="profile-field profile-readonly-field">
-              <p className="profile-label">Verification status</p>
-              <p className="profile-value profile-status-text">
-                {emailChanged
-                  ? emailOtpRequestedFor === normalizedDraftEmail
-                    ? "Email OTP sent"
-                    : "Email change pending verification"
-                  : emailVerified
-                  ? "Email verified"
-                  : "Email not set"}
-              </p>
-            </div>
           </div>
 
           {emailChanged && emailOtpRequestedFor === normalizedDraftEmail ? (
             <div className="profile-otp-card">
-              <p className="profile-label">Verify email</p>
-              <div className="otp-input-row">
+              <div className="profile-otp-row">
                 <input
                   className="otp-digit-input profile-otp-input"
                   value={emailOtp}
@@ -289,8 +275,6 @@ export function ProfilePage() {
                   maxLength={6}
                   placeholder="Enter OTP"
                 />
-              </div>
-              <div className="profile-inline-actions">
                 <button
                   type="button"
                   className="btn-primary"
@@ -304,7 +288,8 @@ export function ProfilePage() {
           ) : null}
 
           <p className="profile-note">
-            Keep your details updated so print shops can contact you quickly for urgent jobs.
+            Keep your details updated so print shops can contact you quickly for
+            urgent jobs.
           </p>
 
           {message ? <p className="profile-success-text">{message}</p> : null}

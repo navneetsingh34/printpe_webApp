@@ -274,7 +274,9 @@ export function AppShell() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
 
-        const detector = DetectorCtor ? new DetectorCtor({ formats: ["qr_code"] }) : null;
+        const detector = DetectorCtor
+          ? new DetectorCtor({ formats: ["qr_code"] })
+          : null;
 
         timer = window.setInterval(async () => {
           if (stopped || !videoRef.current || scanResult) return;
@@ -286,8 +288,8 @@ export function AppShell() {
                   (entry) => entry.rawValue,
                 )?.rawValue
               : canvasRef.current
-              ? detectQrFromVideoFrame(videoRef.current, canvasRef.current)
-              : null;
+                ? detectQrFromVideoFrame(videoRef.current, canvasRef.current)
+                : null;
 
             if (value) {
               const shopId = resolveShopIdFromScannedValue(value);
@@ -302,9 +304,7 @@ export function AppShell() {
               }
 
               setScanResult(value);
-              setScanError(
-                "This QR code does not contain a valid shop ID.",
-              );
+              setScanError("This QR code does not contain a valid shop ID.");
             }
           } catch {
             // Ignore transient detection errors while camera is active.

@@ -1,5 +1,5 @@
-import { apiRequest } from './httpClient';
-import { AuthUser } from '../../shared/types/auth';
+import { apiRequest } from "./httpClient";
+import { AuthUser } from "../../shared/types/auth";
 
 export type UpdateMeInput = {
   firstName?: string;
@@ -16,12 +16,17 @@ export type EmailOtpResponse = {
 };
 
 export function updateMe(input: UpdateMeInput): Promise<AuthUser> {
-  return apiRequest('/users/me', { method: 'PATCH', body: JSON.stringify(input) });
+  return apiRequest("/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
-export function requestEmailOtp(input: { email: string }): Promise<EmailOtpResponse> {
-  return apiRequest('/users/me/email-verification/request-otp', {
-    method: 'POST',
+export function requestEmailOtp(input: {
+  email: string;
+}): Promise<EmailOtpResponse> {
+  return apiRequest("/users/me/email-verification/request-otp", {
+    method: "POST",
     body: JSON.stringify(input),
   });
 }
@@ -30,8 +35,8 @@ export function verifyEmailOtp(input: {
   email: string;
   otp: string;
 }): Promise<{ success: boolean; message: string; email: string }> {
-  return apiRequest('/users/me/email-verification/verify-otp', {
-    method: 'POST',
+  return apiRequest("/users/me/email-verification/verify-otp", {
+    method: "POST",
     body: JSON.stringify(input),
   });
 }
