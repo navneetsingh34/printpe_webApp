@@ -271,6 +271,42 @@ function getFileSignature(file: File): string {
   return `${file.name}::${file.size}::${file.lastModified}`;
 }
 
+function isPrinterOperational(status: unknown): boolean {
+  const normalized = String(status ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) {
+    return true;
+  }
+
+  const offlineHints = [
+    "offline",
+    "unavailable",
+    "disconnected",
+    "paused",
+    "stopped",
+    "maintenance",
+    "error",
+  ];
+  if (offlineHints.some((hint) => normalized.includes(hint))) {
+    return false;
+  }
+
+  const onlineHints = [
+    "online",
+    "busy",
+    "idle",
+    "ready",
+    "printing",
+    "active",
+    "warming",
+    "wakeup",
+  ];
+
+  return onlineHints.some((hint) => normalized.includes(hint));
+}
+
 function dedupeFiles(
   existingFiles: File[],
   candidateFiles: File[],
@@ -649,12 +685,9 @@ export function PrintPage() {
 
     setStatus("Checking shop and printer availability...");
     const shopPrinters = await getShopPrinters(shopId);
-    const hasOnlinePrinter = shopPrinters.some((printer) => {
-      const normalizedStatus = String(printer.status ?? "")
-        .trim()
-        .toLowerCase();
-      return normalizedStatus === "online";
-    });
+    const hasOnlinePrinter = shopPrinters.some((printer) =>
+      isPrinterOperational(printer.status),
+    );
 
     if (!hasOnlinePrinter) {
       setStatus("");
