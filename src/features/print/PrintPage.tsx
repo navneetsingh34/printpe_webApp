@@ -174,17 +174,42 @@ function normalizePricing(
 }
 
 function validateFile(file: File): string | null {
-  const allowed = [
+  const allowedDocMimeTypes = [
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "image/jpeg",
-    "image/png",
   ];
+  const allowedDocExtensions = new Set(["pdf", "doc", "docx"]);
+  const allowedImageExtensions = new Set([
+    "jpg",
+    "jpeg",
+    "jpf",
+    "png",
+    "webp",
+    "gif",
+    "bmp",
+    "heic",
+    "heif",
+    "avif",
+    "img",
+  ]);
   const maxBytes = 50 * 1024 * 1024;
-  if (!allowed.includes(file.type)) {
-    return "Only PDF, DOC, DOCX, JPG, and PNG files are supported.";
+
+  const normalizedMime = String(file.type ?? "").trim().toLowerCase();
+  const extension = file.name.includes(".")
+    ? file.name.split(".").pop()?.trim().toLowerCase() ?? ""
+    : "";
+
+  const isSupportedByMime =
+    allowedDocMimeTypes.includes(normalizedMime) ||
+    normalizedMime.startsWith("image/");
+  const isSupportedByExtension =
+    allowedDocExtensions.has(extension) || allowedImageExtensions.has(extension);
+
+  if (!isSupportedByMime && !isSupportedByExtension) {
+    return "Only PDF, DOC, DOCX, and image files are supported.";
   }
+
   if (file.size > maxBytes) {
     return "File size must be 50MB or less.";
   }
@@ -832,7 +857,7 @@ export function PrintPage() {
             >
               <div className="step-number">1</div>
               <h4>Upload</h4>
-              <p>Choose documents/images (PDF, DOC, DOCX, JPG, PNG)</p>
+              <p>Choose documents/images (PDF, DOC, DOCX, and image files)</p>
             </button>
 
             <div className="step-arrow">→</div>
@@ -1039,9 +1064,7 @@ export function PrintPage() {
                     <div className="upload-icon">📤</div>
                     <h4>Drop files here</h4>
                     <p className="upload-subtitle">or click to browse</p>
-                    <p className="file-hints">
-                      PDF, DOC, DOCX, JPG, PNG • Up to 50MB each
-                    </p>
+                    <p className="file-hints">PDF, DOC, DOCX, image/* • Up to 50MB each</p>
                   </div>
                 )}
 
@@ -1050,7 +1073,7 @@ export function PrintPage() {
                   className="file-input-upload"
                   style={{ display: "none" }}
                   multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.jpf,.png,.webp,.gif,.bmp,.heic,.heif,.avif,.img,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
                   onChange={(e) => {
                     const selected = Array.from(e.target.files ?? []);
                     void onPickFiles(selected);
@@ -1061,7 +1084,7 @@ export function PrintPage() {
                   className="file-input-add-more"
                   style={{ display: "none" }}
                   multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.jpf,.png,.webp,.gif,.bmp,.heic,.heif,.avif,.img,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
                   onChange={(e) => {
                     const selected = Array.from(e.target.files ?? []);
                     void onAppendFiles(selected);
