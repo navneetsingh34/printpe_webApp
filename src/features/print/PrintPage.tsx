@@ -247,7 +247,12 @@ function validateFile(file: File): string | null {
     "img",
   ]);
   const maxBytes = 50 * 1024 * 1024;
-  if (!allowed.includes(file.type)) {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const isAllowedMimeType = allowedDocMimeTypes.includes(file.type);
+  const isAllowedDocExtension = allowedDocExtensions.has(extension);
+  const isAllowedImageExtension = allowedImageExtensions.has(extension);
+
+  if (!isAllowedMimeType && !isAllowedDocExtension && !isAllowedImageExtension) {
     return "Only PDF, DOC, DOCX, JPG, and PNG files are supported.";
   }
 
