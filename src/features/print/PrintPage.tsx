@@ -41,6 +41,7 @@ type PrintPageLocationState = {
 };
 
 const RAZORPAY_CHECKOUT_URL = "https://checkout.razorpay.com/v1/checkout.js";
+const RAZORPAY_CHECKOUT_TIMEOUT_MS = 120000;
 
 function ensureRazorpayLoaded(): Promise<void> {
   if (window.Razorpay) {
@@ -81,6 +82,7 @@ function openRazorpayCheckout(options: {
   orderId: string;
   prefill: { name?: string; email?: string; contact?: string };
   notes: Record<string, string>;
+  timeoutMs?: number;
 }): Promise<{
   razorpay_order_id: string;
   razorpay_payment_id: string;
@@ -92,6 +94,35 @@ function openRazorpayCheckout(options: {
       return;
     }
 
+    const timeoutMs =
+      Number(options.timeoutMs) > 0
+        ? Number(options.timeoutMs)
+        : RAZORPAY_CHECKOUT_TIMEOUT_MS;
+    let settled = false;
+    const checkoutTimeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("Razorpay checkout timeout"));
+    }, timeoutMs);
+
+    const resolveOnce = (response: {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    }) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(checkoutTimeout);
+      resolve(response);
+    };
+
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(checkoutTimeout);
+      reject(error);
+    };
+
     const checkout = new window.Razorpay({
       key: options.key,
       amount: String(options.amount),
@@ -102,9 +133,9 @@ function openRazorpayCheckout(options: {
       prefill: options.prefill,
       notes: options.notes,
       theme: { color: "#7C4DFF" },
-      handler: (response) => resolve(response),
+      handler: (response) => resolveOnce(response),
       modal: {
-        ondismiss: () => reject(new Error("Razorpay checkout dismissed")),
+        ondismiss: () => rejectOnce(new Error("Razorpay checkout dismissed")),
       },
     });
 
@@ -195,16 +226,19 @@ function validateFile(file: File): string | null {
   ]);
   const maxBytes = 50 * 1024 * 1024;
 
-  const normalizedMime = String(file.type ?? "").trim().toLowerCase();
+  const normalizedMime = String(file.type ?? "")
+    .trim()
+    .toLowerCase();
   const extension = file.name.includes(".")
-    ? file.name.split(".").pop()?.trim().toLowerCase() ?? ""
+    ? (file.name.split(".").pop()?.trim().toLowerCase() ?? "")
     : "";
 
   const isSupportedByMime =
     allowedDocMimeTypes.includes(normalizedMime) ||
     normalizedMime.startsWith("image/");
   const isSupportedByExtension =
-    allowedDocExtensions.has(extension) || allowedImageExtensions.has(extension);
+    allowedDocExtensions.has(extension) ||
+    allowedImageExtensions.has(extension);
 
   if (!isSupportedByMime && !isSupportedByExtension) {
     return "Only PDF, DOC, DOCX, and image files are supported.";
@@ -751,7 +785,12 @@ export function PrintPage() {
       navigate("/orders");
     } catch (e) {
       const message = (e as Error).message || "Payment failed";
-      const isCancelled = message.toLowerCase().includes("dismissed");
+      const normalizedMessage = message.toLowerCase();
+      const isCheckoutTimeout = normalizedMessage.includes("timeout");
+      const isCancelled =
+        normalizedMessage.includes("dismissed") ||
+        normalizedMessage.includes("cancel") ||
+        normalizedMessage.includes("closed");
       const canReconcile = Boolean(currentOrderId) && !isCancelled;
 
       if (canReconcile) {
@@ -768,8 +807,24 @@ export function PrintPage() {
             navigate("/orders");
             return;
           }
+
+          if (isCheckoutTimeout) {
+            setPaymentPhase("idle");
+            setStatus("");
+            setError(
+              "Checkout timed out and payment is not captured yet. Please retry in a moment.",
+            );
+            return;
+          }
         } catch {
-          // fall through and show the original failure message
+          if (isCheckoutTimeout) {
+            setPaymentPhase("idle");
+            setStatus("");
+            setError(
+              "Checkout timed out. Payment status is unknown. Please check Orders before retrying.",
+            );
+            return;
+          }
         }
       }
 
@@ -1064,7 +1119,9 @@ export function PrintPage() {
                     <div className="upload-icon">📤</div>
                     <h4>Drop files here</h4>
                     <p className="upload-subtitle">or click to browse</p>
-                    <p className="file-hints">PDF, DOC, DOCX, image/* • Up to 50MB each</p>
+                    <p className="file-hints">
+                      PDF, DOC, DOCX, image/* • Up to 50MB each
+                    </p>
                   </div>
                 )}
 
