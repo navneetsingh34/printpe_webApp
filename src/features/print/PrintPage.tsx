@@ -739,8 +739,7 @@ export function PrintPage() {
       setError("Selected shop was not found. Please reselect a shop.");
       return;
     }
-    const selectedShopIsOnline =
-      shopOnlineMap[shopId] ?? selectedShop.isActive;
+    const selectedShopIsOnline = shopOnlineMap[shopId] ?? selectedShop.isActive;
     if (!selectedShopIsOnline) {
       setError(
         "Selected shop is currently offline. Please choose an online shop.",
@@ -771,6 +770,8 @@ export function PrintPage() {
 
     setIsSubmitting(true);
     let currentOrderId = "";
+    let createdJobId = "";
+    let createdJobNumber = "";
     let uploadedFiles: Array<{
       id: string;
       fileName: string;
@@ -778,7 +779,7 @@ export function PrintPage() {
     }> | null = null;
     let resolvedPages = filePages;
 
-    const createJobForCapturedPayment = async (orderId: string) => {
+    const createPendingPaymentJob = async () => {
       setPaymentPhase("creating_job");
       setStatus("Uploading documents and creating print job...");
 
@@ -807,11 +808,10 @@ export function PrintPage() {
         throw new Error("No files were uploaded. Please try again.");
       }
 
-      await createPrintJob({
+      const createdJob = await createPrintJob({
         shopId,
         fileId: primaryFileId,
         totalPages: resolvedPages,
-        paymentOrderId: orderId,
         printOptions: {
           copies,
           color,
@@ -826,18 +826,18 @@ export function PrintPage() {
           })),
         },
       });
+
+      createdJobId = createdJob.id;
+      createdJobNumber = createdJob.jobNumber;
     };
 
     try {
+      await createPendingPaymentJob();
+
       setPaymentPhase("creating_order");
       setStatus("Creating payment order...");
       const order = await createPaymentOrder({
-        estimatedPrintCost: estimate.total,
-        shopId,
-        description:
-          files.length === 1
-            ? files[0].name
-            : `${files.length} documents for printing`,
+        printJobId: createdJobId,
       });
       currentOrderId = order.orderId;
       if (typeof order.totalAmount === "number") {
@@ -853,7 +853,7 @@ export function PrintPage() {
         amount: order.amount,
         currency: order.currency || "INR",
         name: env.razorpayMerchantName || "PrintQ",
-        description: `Print order ${order.jobNumber || "PrintQ"}`,
+        description: `Print order ${createdJobNumber || order.jobNumber || "PrintQ"}`,
         orderId: order.orderId,
         prefill: {
           name: [user?.firstName, user?.lastName].filter(Boolean).join(" "),
@@ -876,8 +876,6 @@ export function PrintPage() {
         razorpaySignature: paymentResult.razorpay_signature,
       });
 
-      await createJobForCapturedPayment(currentOrderId);
-
       setStatus("Payment successful. Your print request is now in queue.");
       resetFlow();
       navigate("/orders");
@@ -899,7 +897,6 @@ export function PrintPage() {
           const payment =
             reconciled.payment ?? (await getPaymentByOrderId(currentOrderId));
           if (payment.status === "captured") {
-            await createJobForCapturedPayment(currentOrderId);
             setStatus("Payment confirmed. Your print request is now in queue.");
             resetFlow();
             navigate("/orders");
