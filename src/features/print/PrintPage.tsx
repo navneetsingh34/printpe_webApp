@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/auth-context";
 import { useLocation } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
@@ -14,12 +14,19 @@ import {
 import { env } from "../../services/api/env";
 import { getAllShops, getShopPricing } from "../../services/api/shopsApi";
 import { getShopPrinters } from "../../services/api/printersApi";
+import { getTokenBundle } from "../../services/storage/tokenStorage";
+import {
+  connectShopStatusSocket,
+  ShopStatusChangedPayload,
+  ShopStatusSnapshotPayload,
+} from "../../services/realtime/shopStatusSocket";
 import {
   PrintShop,
   ShopPricingConfig,
   TieredRate,
 } from "../../shared/types/shop";
 import { BackButton } from "../../shared/ui/BackButton";
+import type { Socket } from "socket.io-client";
 
 type PrintStep = "intro" | "upload" | "configure" | "payment";
 type PaymentPhase =
@@ -356,6 +363,10 @@ export function PrintPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [leaveWarningOpen, setLeaveWarningOpen] = useState(false);
   const [duplicateWarningOpen, setDuplicateWarningOpen] = useState(false);
+  const [shopOnlineMap, setShopOnlineMap] = useState<Record<string, boolean>>(
+    {},
+  );
+  const socketRef = useRef<Socket | null>(null);
 
   const statusIsWarning = status.toLowerCase().includes("already uploaded");
 
@@ -427,6 +438,54 @@ export function PrintPage() {
       state: null,
     });
   }, [location.pathname, location.search, location.state, navigate]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const startSocket = async () => {
+      const bundle = await getTokenBundle();
+      if (!bundle?.accessToken || !mounted) return;
+
+      const socket = connectShopStatusSocket(bundle.accessToken);
+      socketRef.current = socket;
+
+      socket.on("connect", () => {
+        socket.emit("status:subscribe", {});
+      });
+
+      socket.on(
+        "shops:status-snapshot",
+        (payload: ShopStatusSnapshotPayload) => {
+          if (!mounted) return;
+          const next = payload.shops.reduce<Record<string, boolean>>(
+            (acc, item) => {
+              acc[item.shopId] = item.isOnline;
+              return acc;
+            },
+            {},
+          );
+          setShopOnlineMap(next);
+        },
+      );
+
+      socket.on("shop:status-changed", (payload: ShopStatusChangedPayload) => {
+        if (!mounted) return;
+        setShopOnlineMap((prev) => ({
+          ...prev,
+          [payload.shopId]: payload.isOnline,
+        }));
+      });
+    };
+
+    void startSocket();
+
+    return () => {
+      mounted = false;
+      socketRef.current?.emit("status:unsubscribe");
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
 
   const resetFlow = () => {
     setStep("intro");
@@ -676,7 +735,13 @@ export function PrintPage() {
     }
 
     const selectedShop = shops.find((shop) => shop.id === shopId);
-    if (!selectedShop?.isActive) {
+    if (!selectedShop) {
+      setError("Selected shop was not found. Please reselect a shop.");
+      return;
+    }
+    const selectedShopIsOnline =
+      shopOnlineMap[shopId] ?? selectedShop.isActive;
+    if (!selectedShopIsOnline) {
       setError(
         "Selected shop is currently offline. Please choose an online shop.",
       );
