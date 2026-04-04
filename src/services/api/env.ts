@@ -24,6 +24,7 @@ export const env = {
   apiBaseUrl: required("API_BASE_URL", metaEnv.API_BASE_URL),
   wsBaseUrl: required("WS_BASE_URL", metaEnv.WS_BASE_URL),
   googleWebClientId: optional(metaEnv.GOOGLE_WEB_CLIENT_ID),
+  googleCallbackUrl: optional(metaEnv.GOOGLE_CALLBACK_URL),
   accessTokenKey: withDefault(metaEnv.AUTH_ACCESS_TOKEN_KEY, "printq_access_token"),
   refreshTokenKey: withDefault(metaEnv.AUTH_REFRESH_TOKEN_KEY, "printq_refresh_token"),
   razorpayKeyId: optional(metaEnv.RAZORPAY_KEY_ID),

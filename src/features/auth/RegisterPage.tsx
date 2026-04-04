@@ -84,7 +84,9 @@ export function RegisterPage() {
     }
 
     window.sessionStorage.setItem(consentStorageKey, "true");
-    const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    const returnUrl =
+      env.googleCallbackUrl ||
+      `${window.location.origin}${window.location.pathname}${window.location.search}`;
     const oauthApiBaseUrl = env.apiBaseUrl.replace(/\/$/, "");
     const oauthStartUrl = `${oauthApiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
     window.location.href = oauthStartUrl;
