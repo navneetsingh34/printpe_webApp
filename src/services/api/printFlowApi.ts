@@ -20,6 +20,12 @@ export type CreatePrintJobInput = {
     doubleSided: boolean;
     paperSize: string;
     binding?: string;
+    documentQueue?: Array<{
+      fileId: string;
+      fileName: string;
+      pageCount: number;
+      copies: number;
+    }>;
   };
 };
 

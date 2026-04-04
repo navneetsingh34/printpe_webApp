@@ -10,6 +10,7 @@ import { HomePage } from "../features/home/HomePage";
 import { PrintPage } from "../features/print/PrintPage";
 import { DocumentPreviewPage } from "../features/print/DocumentPreviewPage";
 import { OrdersPage } from "../features/orders/OrdersPage";
+import { OrderDetailsPage } from "../features/orders/OrderDetailsPage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { ProfilePage } from "../features/profile/ProfilePage";
 import { PrinterLoading } from "../shared/ui/PrinterLoading";
@@ -53,6 +54,7 @@ export function AppRoutes() {
         <Route path="print" element={<PrintPage />} />
         <Route path="print/preview" element={<DocumentPreviewPage />} />
         <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/:orderId" element={<OrderDetailsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>

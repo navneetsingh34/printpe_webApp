@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { AuthTopNav } from "../../shared/ui/AuthTopNav";
 
 type Props = {
   title: string;
@@ -7,10 +8,18 @@ type Props = {
   children: ReactNode;
 };
 
-export function AuthFormLayout({ title, subtitle, variant = "default", children }: Props) {
+export function AuthFormLayout({
+  title,
+  subtitle,
+  variant = "default",
+  children,
+}: Props) {
   return (
     <div className="auth-single-wrap page-animate">
-      <section className={`auth-card auth-card-single auth-card-single--${variant} animate-rise`}>
+      <AuthTopNav />
+      <section
+        className={`auth-card auth-card-single auth-card-single--${variant} animate-rise`}
+      >
         <div className="auth-form-pane">
           <div className="auth-header">
             <p className="section-kicker">PRINTPE PLATFORM</p>

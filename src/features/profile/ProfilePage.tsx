@@ -1,21 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import {
-  requestEmailOtp,
-  updateMe,
-  verifyEmailOtp,
-} from "../../services/api/usersApi";
+import { updateMe } from "../../services/api/usersApi";
 import { useAuth } from "../auth/auth-context";
 
 export function ProfilePage() {
   const { user, signOut, refreshProfile } = useAuth();
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [emailOtp, setEmailOtp] = useState("");
-  const [emailOtpRequestedFor, setEmailOtpRequestedFor] = useState("");
-  const [requestingEmailOtp, setRequestingEmailOtp] = useState(false);
-  const [verifyingEmailOtp, setVerifyingEmailOtp] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -23,10 +13,6 @@ export function ProfilePage() {
   useEffect(() => {
     setFirstName(user?.firstName ?? "");
     setLastName(user?.lastName ?? "");
-    setEmail(user?.email ?? "");
-    setEmailOtp("");
-    setEmailOtpRequestedFor("");
-    setEmailVerified(true);
   }, [user]);
 
   const fullName = useMemo(
@@ -41,105 +27,27 @@ export function ProfilePage() {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
   const role = user?.role ?? "user";
-
-  const normalizedCurrentEmail = (user?.email ?? "").trim().toLowerCase();
-  const normalizedDraftEmail = email.trim().toLowerCase();
-  const emailChanged = normalizedDraftEmail !== normalizedCurrentEmail;
-
-  const canSave = !emailChanged || emailVerified;
-
-  const requestEmailVerification = async () => {
-    setError("");
-    setMessage("");
-
-    if (!normalizedDraftEmail) {
-      setError("Email is required.");
-      return;
-    }
-
-    if (!emailChanged) {
-      setError("Enter a new email address first.");
-      return;
-    }
-
-    setRequestingEmailOtp(true);
-    try {
-      const response = await requestEmailOtp({ email: normalizedDraftEmail });
-      setEmailOtpRequestedFor(normalizedDraftEmail);
-      setEmailOtp("");
-      setEmailVerified(false);
-      setMessage(response.message || "OTP sent to your email address.");
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to send email OTP.",
-      );
-    } finally {
-      setRequestingEmailOtp(false);
-    }
-  };
-
-  const confirmEmailVerification = async () => {
-    setError("");
-    setMessage("");
-
-    if (emailOtpRequestedFor !== normalizedDraftEmail) {
-      setError("Request an OTP for the current email first.");
-      return;
-    }
-
-    if (emailOtp.trim().length < 4) {
-      setError("Enter the OTP sent to your email.");
-      return;
-    }
-
-    setVerifyingEmailOtp(true);
-    try {
-      const response = await verifyEmailOtp({
-        email: normalizedDraftEmail,
-        otp: emailOtp.trim(),
-      });
-      await refreshProfile();
-      setEmail(response.email);
-      setEmailOtpRequestedFor("");
-      setEmailOtp("");
-      setEmailVerified(true);
-      setMessage(
-        response.message || "Email verified successfully. You can save now.",
-      );
-    } catch (verifyError) {
-      setError(
-        verifyError instanceof Error
-          ? verifyError.message
-          : "Unable to verify email.",
-      );
-    } finally {
-      setVerifyingEmailOtp(false);
-    }
-  };
+  const normalizedCurrentFirstName = (user?.firstName ?? "").trim();
+  const normalizedCurrentLastName = (user?.lastName ?? "").trim();
+  const normalizedNextFirstName = firstName.trim();
+  const normalizedNextLastName = lastName.trim();
+  const hasNameChanges =
+    normalizedNextFirstName !== normalizedCurrentFirstName ||
+    normalizedNextLastName !== normalizedCurrentLastName;
+  const canSave =
+    hasNameChanges &&
+    Boolean(normalizedNextFirstName && normalizedNextLastName);
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     setMessage("");
 
-    const nextFirstName = firstName.trim();
-    const nextLastName = lastName.trim();
-    const nextEmail = normalizedDraftEmail;
+    const nextFirstName = normalizedNextFirstName;
+    const nextLastName = normalizedNextLastName;
 
     if (!nextFirstName || !nextLastName) {
       setError("First and last name are required.");
-      return;
-    }
-
-    if (!nextEmail) {
-      setError("Email is required.");
-      return;
-    }
-
-    if (emailChanged && !emailVerified) {
-      setError("Verify the new email address before saving changes.");
       return;
     }
 
@@ -160,18 +68,15 @@ export function ProfilePage() {
         nextMessages.push("Profile updated successfully.");
       }
 
-      if (
-        nextFirstName === (user?.firstName ?? "") &&
-        nextLastName === (user?.lastName ?? "")
-      ) {
-        nextMessages.push("No changes to save.");
-      }
-
       if (nextMessages.length > 0) {
         setMessage(nextMessages.join(" "));
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to update profile.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to update profile.",
+      );
     } finally {
       setSaving(false);
     }
@@ -222,89 +127,20 @@ export function ProfilePage() {
 
             <label className="profile-field">
               <span className="profile-label">Email</span>
-              <div className="profile-input-shell">
-                <input
-                  className="profile-input profile-input--action"
-                  type="email"
-                  value={email}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setEmail(nextValue);
-
-                    const nextNormalized = nextValue.trim().toLowerCase();
-                    setEmailVerified(nextNormalized === normalizedCurrentEmail);
-                    if (nextNormalized !== emailOtpRequestedFor) {
-                      setEmailOtpRequestedFor("");
-                      setEmailOtp("");
-                    }
-                  }}
-                  autoComplete="email"
-                />
-                <button
-                  type="button"
-                  className="profile-input-action-btn"
-                  onClick={() => void requestEmailVerification()}
-                  disabled={requestingEmailOtp || !emailChanged}
-                >
-                  {requestingEmailOtp
-                    ? "Sending..."
-                    : emailOtpRequestedFor === normalizedDraftEmail
-                    ? "Resend"
-                    : "Verify"}
-                </button>
-              </div>
+              <input
+                className="profile-input"
+                type="email"
+                value={user?.email ?? ""}
+                autoComplete="email"
+                readOnly
+                disabled
+              />
             </label>
-
-            <div className="profile-field">
-              <p className="profile-label">Role</p>
-              <p className="profile-value profile-role-text">{role}</p>
-            </div>
-
-            <div className="profile-field profile-readonly-field">
-              <p className="profile-label">Verification status</p>
-              <p className="profile-value profile-status-text">
-                {emailChanged
-                  ? emailOtpRequestedFor === normalizedDraftEmail
-                    ? "Email OTP sent"
-                    : "Email change pending verification"
-                  : emailVerified
-                  ? "Email verified"
-                  : "Email not set"}
-              </p>
-            </div>
           </div>
 
-          {emailChanged && emailOtpRequestedFor === normalizedDraftEmail ? (
-            <div className="profile-otp-card">
-              <p className="profile-label">Verify email</p>
-              <div className="otp-input-row">
-                <input
-                  className="otp-digit-input profile-otp-input"
-                  value={emailOtp}
-                  onChange={(event) =>
-                    setEmailOtp(event.target.value.replace(/\D/g, ""))
-                  }
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  placeholder="Enter OTP"
-                />
-              </div>
-              <div className="profile-inline-actions">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => void confirmEmailVerification()}
-                  disabled={verifyingEmailOtp}
-                >
-                  {verifyingEmailOtp ? "Verifying..." : "Confirm OTP"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
           <p className="profile-note">
-            Keep your details updated so print shops can contact you quickly for urgent jobs.
+            Keep your details updated so print shops can contact you quickly for
+            urgent jobs.
           </p>
 
           {message ? <p className="profile-success-text">{message}</p> : null}
