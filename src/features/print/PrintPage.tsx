@@ -775,7 +775,8 @@ export function PrintPage() {
 
     if (
       env.razorpayKeyId.startsWith("rzp_test_") &&
-      !isLocalHost(window.location.hostname)
+      !isLocalHost(window.location.hostname) &&
+      !env.allowRazorpayTestModeOnNonLocal
     ) {
       setError(
         "Payments are in Razorpay test mode on a non-local host. Use LIVE Razorpay keys in frontend and backend for real payments.",

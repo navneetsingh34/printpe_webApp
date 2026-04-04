@@ -25,6 +25,9 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.RAZORPAY_MERCHANT_NAME": JSON.stringify(
         env.RAZORPAY_MERCHANT_NAME ?? "",
       ),
+      "import.meta.env.ALLOW_RAZORPAY_TEST_MODE_ON_NON_LOCAL": JSON.stringify(
+        env.ALLOW_RAZORPAY_TEST_MODE_ON_NON_LOCAL ?? "",
+      ),
     },
     test: {
       environment: "jsdom",

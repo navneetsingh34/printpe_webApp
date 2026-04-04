@@ -18,6 +18,11 @@ function withDefault(value: string | undefined, fallback: string): string {
   return normalized || fallback;
 }
 
+function toBoolean(value: string | undefined): boolean {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
 const metaEnv = import.meta.env as Record<string, string | undefined>;
 
 export const env = {
@@ -35,4 +40,7 @@ export const env = {
   ),
   razorpayKeyId: optional(metaEnv.RAZORPAY_KEY_ID),
   razorpayMerchantName: optional(metaEnv.RAZORPAY_MERCHANT_NAME),
+  allowRazorpayTestModeOnNonLocal: toBoolean(
+    metaEnv.ALLOW_RAZORPAY_TEST_MODE_ON_NON_LOCAL,
+  ),
 } as const;
