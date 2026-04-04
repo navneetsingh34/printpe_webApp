@@ -31,6 +31,10 @@ type PaymentPhase =
 
 const RAZORPAY_CHECKOUT_URL = "https://checkout.razorpay.com/v1/checkout.js";
 
+function isLocalHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
 function ensureRazorpayLoaded(): Promise<void> {
   if (window.Razorpay) {
     return Promise.resolve();
@@ -95,6 +99,15 @@ function openRazorpayCheckout(options: {
       modal: {
         ondismiss: () => reject(new Error("Razorpay checkout dismissed")),
       },
+    });
+
+    checkout.on("payment.failed", (response) => {
+      const reason =
+        response?.error?.description ||
+        response?.error?.reason ||
+        response?.error?.code ||
+        "Payment could not be completed in Razorpay.";
+      reject(new Error(reason));
     });
 
     checkout.open();
@@ -167,10 +180,12 @@ function validateFile(file: File): string | null {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
   ];
   const maxBytes = 50 * 1024 * 1024;
   if (!allowed.includes(file.type)) {
-    return "Only PDF, DOC, and DOCX files are supported.";
+    return "Only PDF, DOC, DOCX, JPG, and PNG files are supported.";
   }
   if (file.size > maxBytes) {
     return "File size must be 50MB or less.";
@@ -400,6 +415,16 @@ export function PrintPage() {
       return;
     }
 
+    if (
+      env.razorpayKeyId.startsWith("rzp_test_") &&
+      !isLocalHost(window.location.hostname)
+    ) {
+      setError(
+        "Payments are in Razorpay test mode on a non-local host. Use LIVE Razorpay keys in frontend and backend for real payments.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     let currentOrderId = "";
     let uploadedFileId: string | null = null;
@@ -548,7 +573,7 @@ export function PrintPage() {
             >
               <div className="step-number">1</div>
               <h4>Upload</h4>
-              <p>Choose your document (PDF, DOC, DOCX)</p>
+              <p>Choose your file (PDF, DOC, DOCX, JPG, PNG)</p>
             </button>
 
             <div className="step-arrow">→</div>
@@ -666,7 +691,7 @@ export function PrintPage() {
                     <div className="upload-icon">📤</div>
                     <h4>Drop your file here</h4>
                     <p className="upload-subtitle">or click to browse</p>
-                    <p className="file-hints">PDF, DOC, DOCX • Max 50MB</p>
+                    <p className="file-hints">PDF, DOC, DOCX, JPG, PNG • Max 50MB</p>
                   </div>
                 )}
 
@@ -674,7 +699,7 @@ export function PrintPage() {
                   type="file"
                   className="file-input-upload"
                   style={{ display: "none" }}
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
                   onChange={(e) => {
                     const selected = e.target.files?.[0] ?? null;
                     void onPickFile(selected);

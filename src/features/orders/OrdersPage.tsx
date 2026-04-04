@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { OrderItem } from "../../shared/types/order";
 import {
+  collectOrder,
   getMyOrders,
+  getOrderDocumentUrls,
+  OrderDocumentItem,
   getOrderQueuePosition,
 } from "../../services/api/ordersApi";
 import {
@@ -19,7 +22,7 @@ const TRACK_STATUSES = [
   "ready_for_pickup",
 ] as const;
 
-type DisplayStatus = (typeof TRACK_STATUSES)[number] | "cancelled";
+type DisplayStatus = (typeof TRACK_STATUSES)[number] | "picked_up" | "cancelled";
 type QueueInfo = { position: number | null; estimatedMinutes: number | null };
 type OrderTab = "latest" | "old";
 
@@ -34,6 +37,7 @@ const STATUS_CONFIG: Record<
   queued: { icon: "⏳", color: "#f59e0b", bgColor: "#fef3c7" },
   printed: { icon: "🖨️", color: "#10b981", bgColor: "#d1fae5" },
   ready_for_pickup: { icon: "✨", color: "#8a5220", bgColor: "#ffe9d3" },
+  picked_up: { icon: "✅", color: "#166534", bgColor: "#dcfce7" },
   cancelled: { icon: "❌", color: "#ef4444", bgColor: "#fee2e2" },
 };
 
@@ -52,7 +56,7 @@ function normalizeTrackingStatus(rawStatus: string): DisplayStatus {
     return "cancelled";
   }
   if (status === "processing") return "queued";
-  if (status === "picked_up") return "ready_for_pickup";
+  if (status === "picked_up") return "picked_up";
   if (TRACK_STATUSES.includes(status as (typeof TRACK_STATUSES)[number])) {
     return status as DisplayStatus;
   }
@@ -60,6 +64,7 @@ function normalizeTrackingStatus(rawStatus: string): DisplayStatus {
 }
 
 function getStatusIndex(status: DisplayStatus): number {
+  if (status === "picked_up") return TRACK_STATUSES.length - 1;
   const idx = TRACK_STATUSES.indexOf(status as (typeof TRACK_STATUSES)[number]);
   return idx < 0 ? 0 : idx;
 }
@@ -85,6 +90,7 @@ function titleCase(input: string): string {
 
 function formatStatusLabel(status: DisplayStatus): string {
   if (status === "ready_for_pickup") return "Collect now";
+  if (status === "picked_up") return "Picked up";
   return titleCase(status);
 }
 
@@ -94,6 +100,7 @@ function formatTimelineLabel(status: (typeof TRACK_STATUSES)[number]): string {
 }
 
 function getProgressPercentage(status: DisplayStatus): number {
+  if (status === "picked_up") return 100;
   const statusIdx = TRACK_STATUSES.indexOf(
     status as (typeof TRACK_STATUSES)[number],
   );
@@ -122,6 +129,18 @@ export function OrdersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [queueMap, setQueueMap] = useState<Record<string, QueueInfo>>({});
+  const [collectingByOrderId, setCollectingByOrderId] = useState<
+    Record<string, boolean>
+  >({});
+  const [docsByOrderId, setDocsByOrderId] = useState<
+    Record<string, OrderDocumentItem[]>
+  >({});
+  const [docsLoadingByOrderId, setDocsLoadingByOrderId] = useState<
+    Record<string, boolean>
+  >({});
+  const [showDocsByOrderId, setShowDocsByOrderId] = useState<
+    Record<string, boolean>
+  >({});
   const [activeTab, setActiveTab] = useState<OrderTab>("latest");
   const [socketConnected, setSocketConnected] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Record<string, number>>(
@@ -285,6 +304,48 @@ export function OrdersPage() {
       ),
     [orders, latestOrders],
   );
+
+  const onCollectOrder = async (orderId: string) => {
+    setCollectingByOrderId((prev) => ({ ...prev, [orderId]: true }));
+    setError("");
+    try {
+      const updated = await collectOrder(orderId);
+      setOrders((prev) =>
+        prev.map((order) => (order.id === updated.id ? { ...order, ...updated } : order)),
+      );
+    } catch (e) {
+      setError((e as Error).message || "Unable to mark order as picked up.");
+    } finally {
+      setCollectingByOrderId((prev) => ({ ...prev, [orderId]: false }));
+    }
+  };
+
+  const onViewDocs = async (orderId: string) => {
+    const alreadyVisible = Boolean(showDocsByOrderId[orderId]);
+    if (alreadyVisible) {
+      setShowDocsByOrderId((prev) => ({ ...prev, [orderId]: false }));
+      return;
+    }
+
+    setShowDocsByOrderId((prev) => ({ ...prev, [orderId]: true }));
+    if (docsByOrderId[orderId]?.length) {
+      return;
+    }
+
+    setDocsLoadingByOrderId((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const payload = await getOrderDocumentUrls(orderId);
+      setDocsByOrderId((prev) => ({
+        ...prev,
+        [orderId]: payload.documents ?? [],
+      }));
+    } catch (e) {
+      setError((e as Error).message || "Unable to fetch documents.");
+      setShowDocsByOrderId((prev) => ({ ...prev, [orderId]: false }));
+    } finally {
+      setDocsLoadingByOrderId((prev) => ({ ...prev, [orderId]: false }));
+    }
+  };
 
   if (loading) {
     return (
@@ -504,13 +565,53 @@ export function OrdersPage() {
 
                   {/* Action Buttons */}
                   <div className="order-actions">
-                    <button className="action-btn secondary" type="button">
-                      📋 View Details
+                    {displayStatus === "ready_for_pickup" ? (
+                      <button
+                        className="action-btn"
+                        type="button"
+                        onClick={() => void onCollectOrder(order.id)}
+                        disabled={Boolean(collectingByOrderId[order.id])}
+                      >
+                        {collectingByOrderId[order.id]
+                          ? "⏳ Updating..."
+                          : "✅ Collect Now"}
+                      </button>
+                    ) : null}
+                    <button
+                      className="action-btn secondary"
+                      type="button"
+                      onClick={() => void onViewDocs(order.id)}
+                    >
+                      📄 View Docs
                     </button>
                     <button className="action-btn" type="button">
                       ⚠️ Report Order
                     </button>
                   </div>
+
+                  {showDocsByOrderId[order.id] ? (
+                    <div className="card" style={{ marginTop: 10 }}>
+                      <p style={{ margin: 0, fontWeight: 700 }}>Uploaded Documents</p>
+                      {docsLoadingByOrderId[order.id] ? (
+                        <p style={{ marginTop: 8 }}>Loading documents...</p>
+                      ) : (docsByOrderId[order.id] ?? []).length === 0 ? (
+                        <p style={{ marginTop: 8 }}>No documents found for this order.</p>
+                      ) : (
+                        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                          {(docsByOrderId[order.id] ?? []).map((doc, index) => (
+                            <button
+                              key={`${order.id}-${doc.fileId}-${index}`}
+                              className="action-btn secondary"
+                              type="button"
+                              onClick={() => window.open(doc.url, "_blank", "noopener,noreferrer")}
+                            >
+                              {`${index + 1}. ${doc.name} (${doc.pageCount} pages, ${doc.copies} copies)`}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}

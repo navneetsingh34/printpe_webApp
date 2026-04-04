@@ -85,7 +85,7 @@ describe("PrintPage", () => {
     const badFile = new File(["x"], "notes.txt", { type: "text/plain" });
     fireEvent.change(fileInput, { target: { files: [badFile] } });
 
-    await screen.findByText("Only PDF, DOC, and DOCX files are supported.");
+    await screen.findByText("Only PDF, DOC, DOCX, JPG, and PNG files are supported.");
     await waitFor(() => {
       expect(mocked.uploadDocument).not.toHaveBeenCalled();
     });
