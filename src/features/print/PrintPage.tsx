@@ -50,6 +50,10 @@ type PrintPageLocationState = {
 const RAZORPAY_CHECKOUT_URL = "https://checkout.razorpay.com/v1/checkout.js";
 const RAZORPAY_CHECKOUT_TIMEOUT_MS = 120000;
 
+function isLocalHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
 function ensureRazorpayLoaded(): Promise<void> {
   if (window.Razorpay) {
     return Promise.resolve();
@@ -146,6 +150,15 @@ function openRazorpayCheckout(options: {
       },
     });
 
+    checkout.on("payment.failed", (response) => {
+      const reason =
+        response?.error?.description ||
+        response?.error?.reason ||
+        response?.error?.code ||
+        "Payment could not be completed in Razorpay.";
+      reject(new Error(reason));
+    });
+
     checkout.open();
   });
 }
@@ -216,6 +229,8 @@ function validateFile(file: File): string | null {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
   ];
   const allowedDocExtensions = new Set(["pdf", "doc", "docx"]);
   const allowedImageExtensions = new Set([
@@ -232,23 +247,8 @@ function validateFile(file: File): string | null {
     "img",
   ]);
   const maxBytes = 50 * 1024 * 1024;
-
-  const normalizedMime = String(file.type ?? "")
-    .trim()
-    .toLowerCase();
-  const extension = file.name.includes(".")
-    ? (file.name.split(".").pop()?.trim().toLowerCase() ?? "")
-    : "";
-
-  const isSupportedByMime =
-    allowedDocMimeTypes.includes(normalizedMime) ||
-    normalizedMime.startsWith("image/");
-  const isSupportedByExtension =
-    allowedDocExtensions.has(extension) ||
-    allowedImageExtensions.has(extension);
-
-  if (!isSupportedByMime && !isSupportedByExtension) {
-    return "Only PDF, DOC, DOCX, and image files are supported.";
+  if (!allowed.includes(file.type)) {
+    return "Only PDF, DOC, DOCX, JPG, and PNG files are supported.";
   }
 
   if (file.size > maxBytes) {
@@ -768,6 +768,16 @@ export function PrintPage() {
       return;
     }
 
+    if (
+      env.razorpayKeyId.startsWith("rzp_test_") &&
+      !isLocalHost(window.location.hostname)
+    ) {
+      setError(
+        "Payments are in Razorpay test mode on a non-local host. Use LIVE Razorpay keys in frontend and backend for real payments.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     let currentOrderId = "";
     let createdJobId = "";
@@ -1007,7 +1017,7 @@ export function PrintPage() {
             >
               <div className="step-number">1</div>
               <h4>Upload</h4>
-              <p>Choose documents/images (PDF, DOC, DOCX, and image files)</p>
+              <p>Choose your file (PDF, DOC, DOCX, JPG, PNG)</p>
             </button>
 
             <div className="step-arrow">→</div>
@@ -1214,9 +1224,7 @@ export function PrintPage() {
                     <div className="upload-icon">📤</div>
                     <h4>Drop files here</h4>
                     <p className="upload-subtitle">or click to browse</p>
-                    <p className="file-hints">
-                      PDF, DOC, DOCX, image/* • Up to 50MB each
-                    </p>
+                    <p className="file-hints">PDF, DOC, DOCX, JPG, PNG • Max 50MB</p>
                   </div>
                 )}
 
@@ -1224,19 +1232,7 @@ export function PrintPage() {
                   type="file"
                   className="file-input-upload"
                   style={{ display: "none" }}
-                  multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.jpf,.png,.webp,.gif,.bmp,.heic,.heif,.avif,.img,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
-                  onChange={(e) => {
-                    const selected = Array.from(e.target.files ?? []);
-                    void onPickFiles(selected);
-                  }}
-                />
-                <input
-                  type="file"
-                  className="file-input-add-more"
-                  style={{ display: "none" }}
-                  multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.jpf,.png,.webp,.gif,.bmp,.heic,.heif,.avif,.img,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
                   onChange={(e) => {
                     const selected = Array.from(e.target.files ?? []);
                     void onAppendFiles(selected);
