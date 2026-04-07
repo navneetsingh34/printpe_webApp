@@ -19,6 +19,7 @@ export type CreatePrintJobInput = {
     color: boolean;
     doubleSided: boolean;
     paperSize: string;
+    manualWork?: boolean;
     binding?: string;
     documentQueue?: Array<{
       fileId: string;
