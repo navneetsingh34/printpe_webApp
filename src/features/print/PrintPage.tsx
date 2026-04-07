@@ -319,6 +319,23 @@ function isPrinterOperational(status: unknown): boolean {
   return onlineHints.some((hint) => normalized.includes(hint));
 }
 
+function supportsRequestedPaperSize(
+  availablePaperSizes: string[] | undefined,
+  selectedPaperSize: string,
+): boolean {
+  if (!Array.isArray(availablePaperSizes) || availablePaperSizes.length === 0) {
+    return true;
+  }
+
+  const normalizedSelected = String(selectedPaperSize)
+    .trim()
+    .toUpperCase();
+
+  return availablePaperSizes.some(
+    (size) => String(size).trim().toUpperCase() === normalizedSelected,
+  );
+}
+
 function dedupeFiles(
   existingFiles: File[],
   candidateFiles: File[],
@@ -576,6 +593,8 @@ export function PrintPage() {
     [pricing.bindings, binding],
   );
 
+  const selectedPrintModeLabel = color ? "Color" : "Black & White";
+
   const estimate = useMemo(() => {
     const tier: TieredRate = color ? selectedPaper.color : selectedPaper.bw;
     const totalSheets = Math.max(0, filePages * copies);
@@ -754,16 +773,26 @@ export function PrintPage() {
 
     setStatus("Checking shop and printer availability...");
     const shopPrinters = await getShopPrinters(shopId);
-    const hasOnlinePrinter = shopPrinters.some((printer) =>
+    const onlinePrinters = shopPrinters.filter((printer) =>
       isPrinterOperational(printer.status),
     );
+    const hasOnlinePrinter = onlinePrinters.length > 0;
 
-    if (!hasOnlinePrinter) {
-      setStatus("");
-      setError(
-        "This shop is online, but no printer is currently online. Please try again later or choose another shop.",
+    const hasEligiblePrinterForSelection = onlinePrinters.some((printer) => {
+      if (color && printer.supportsColor === false) return false;
+      if (doubleSided && printer.supportsDoubleSided === false) return false;
+      if (!supportsRequestedPaperSize(printer.paperSizes, paperSize)) return false;
+      return true;
+    });
+
+    const manualWork = color || !hasOnlinePrinter || !hasEligiblePrinterForSelection;
+
+    if (manualWork) {
+      setStatus(
+        hasOnlinePrinter
+          ? "No suitable printer is available for these options. This job will be created as manual work."
+          : "No printer is currently online. This job will be created as manual work.",
       );
-      return;
     }
 
     if (!env.razorpayKeyId) {
@@ -831,6 +860,7 @@ export function PrintPage() {
         printOptions: {
           copies,
           color,
+          manualWork,
           doubleSided,
           paperSize,
           binding: binding || undefined,
@@ -1400,17 +1430,36 @@ export function PrintPage() {
                 <div className="toggle-options">
                   <label className="toggle-card">
                     <input
-                      type="checkbox"
+                      type="radio"
+                      name="printMode"
+                      checked={!color}
+                      onChange={() => setColor(false)}
+                      className="toggle-input"
+                    />
+                    <div className="toggle-content">
+                      <span className="toggle-check" aria-hidden="true" />
+                      <span className="toggle-icon">🖨️</span>
+                      <div className="toggle-text">
+                        <h4>Black & White</h4>
+                        <p>Monochrome print</p>
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="toggle-card">
+                    <input
+                      type="radio"
+                      name="printMode"
                       checked={color}
-                      onChange={(e) => setColor(e.target.checked)}
+                      onChange={() => setColor(true)}
                       className="toggle-input"
                     />
                     <div className="toggle-content">
                       <span className="toggle-check" aria-hidden="true" />
                       <span className="toggle-icon">🎨</span>
                       <div className="toggle-text">
-                        <h4>Color Print</h4>
-                        <p>Print in full color</p>
+                        <h4>Color</h4>
+                        <p>Full color print</p>
                       </div>
                     </div>
                   </label>
@@ -1502,6 +1551,11 @@ export function PrintPage() {
                     </span>
                   </div>
 
+                  <div className="breakdown-row">
+                    <span className="breakdown-label">Selected mode</span>
+                    <span className="breakdown-value">{selectedPrintModeLabel}</span>
+                  </div>
+
                   {doubleSided &&
                     selectedPaper.doubleSidedDiscountPercent > 0 && (
                       <div className="breakdown-row discount">
@@ -1579,6 +1633,7 @@ export function PrintPage() {
               {paymentPhase !== "idle" ? (
                 <p className="print-feedback print-feedback-success">
                   Payment status: {paymentPhaseLabel[paymentPhase]}
+                  {` | Selected mode: ${selectedPrintModeLabel}`}
                   {payableAmount !== null
                     ? ` | Payable amount: Rs ${payableAmount.toFixed(2)}`
                     : ""}
