@@ -26,7 +26,7 @@ import {
   TieredRate,
 } from "../../shared/types/shop";
 import { BackButton } from "../../shared/ui/BackButton";
-import type { Socket } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 
 type PrintStep = "intro" | "upload" | "configure" | "payment";
 type PaymentPhase =
@@ -317,6 +317,75 @@ function isPrinterOperational(status: unknown): boolean {
   ];
 
   return onlineHints.some((hint) => normalized.includes(hint));
+}
+
+type RealtimePrinterSnapshotPayload = {
+  shopId: string;
+  printers?: Array<{
+    status?: unknown;
+    supportsColor?: boolean;
+    supportsDoubleSided?: boolean;
+    paperSizes?: string[];
+  }>;
+};
+
+async function getRealtimeShopPrinters(shopId: string): Promise<
+  RealtimePrinterSnapshotPayload["printers"]
+> {
+  const bundle = await getTokenBundle();
+  if (!bundle?.accessToken) {
+    throw new Error("Please sign in again to check realtime printer status.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const socket = io(`${env.wsBaseUrl}/companion`, {
+      transports: ["websocket"],
+      auth: { token: bundle.accessToken },
+      autoConnect: true,
+      reconnection: false,
+    });
+
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Realtime printer check timed out."));
+    }, 7000);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      socket.off("connect", onConnect);
+      socket.off("connect_error", onConnectError);
+      socket.off("printers:snapshot", onSnapshot);
+      socket.off("error", onSocketError);
+      socket.disconnect();
+    };
+
+    const onConnect = () => {
+      socket.emit("printers:subscribe", { shopId });
+    };
+
+    const onConnectError = () => {
+      cleanup();
+      reject(new Error("Unable to connect for realtime printer check."));
+    };
+
+    const onSnapshot = (payload: RealtimePrinterSnapshotPayload) => {
+      if (payload?.shopId !== shopId) return;
+      cleanup();
+      resolve(Array.isArray(payload.printers) ? payload.printers : []);
+    };
+
+    const onSocketError = (payload?: { message?: string }) => {
+      cleanup();
+      reject(
+        new Error(payload?.message ?? "Realtime printer check failed."),
+      );
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("connect_error", onConnectError);
+    socket.on("printers:snapshot", onSnapshot);
+    socket.on("error", onSocketError);
+  });
 }
 
 function supportsRequestedPaperSize(
@@ -685,12 +754,80 @@ export function PrintPage() {
     });
   };
 
-  const proceedToPayment = () => {
+  const proceedToPayment = async () => {
     if (!files.length) {
       setError("Please select at least one document before continuing.");
       return;
     }
+
+    if (!shopId) {
+      setError("Please select a print shop before continuing.");
+      return;
+    }
+
+    const selectedShop = shops.find((shop) => shop.id === shopId);
+    if (!selectedShop) {
+      setError("Selected shop was not found. Please reselect a shop.");
+      return;
+    }
+
+    const selectedShopIsOnline = shopOnlineMap[shopId] ?? selectedShop.isActive;
+    if (!selectedShopIsOnline) {
+      setError("Selected shop is currently offline. Please choose an online shop.");
+      return;
+    }
+
+    setStatus("Checking selected printer configuration...");
+    try {
+      let shopPrinters: Array<{
+        status?: unknown;
+        supportsColor?: boolean;
+      }> = [];
+
+      try {
+        const realtimePrinters = await getRealtimeShopPrinters(shopId);
+        shopPrinters = Array.isArray(realtimePrinters) ? realtimePrinters : [];
+      } catch {
+        const apiPrinters = await getShopPrinters(shopId);
+        shopPrinters = apiPrinters as Array<{
+          status?: unknown;
+          supportsColor?: boolean;
+        }>;
+      }
+
+      const onlinePrinters = shopPrinters.filter((printer) =>
+        isPrinterOperational(printer.status),
+      );
+
+      console.log("Shop printers:", shopPrinters);
+      console.log("Online printers:", onlinePrinters);
+      console.log("Selected options - Color:", color);
+
+
+      const hasMatchingOnlinePrinter = color
+        ? onlinePrinters.some(
+            (printer) =>
+              (printer as { supportsColor?: boolean }).supportsColor !== false,
+          )
+        : onlinePrinters.length > 0;
+
+      if (!hasMatchingOnlinePrinter) {
+        setStatus("");
+        setError(
+          color
+            ? "No online color printer is available on desktop for this shop."
+            : "No online printer is available on desktop for this shop.",
+        );
+        return;
+      }
+    } catch {
+      setStatus("");
+      setError("Unable to verify desktop printer status right now. Please try again.");
+      return;
+    }
+
     setError("");
+    setStatus("");
     setStep("payment");
   };
 
@@ -785,13 +922,17 @@ export function PrintPage() {
       return true;
     });
 
-    const manualWork = color || !hasOnlinePrinter || !hasEligiblePrinterForSelection;
+    const bindingRequiresManual = binding !== "none";
+    const manualWork =
+      bindingRequiresManual || !hasOnlinePrinter || !hasEligiblePrinterForSelection;
 
     if (manualWork) {
       setStatus(
-        hasOnlinePrinter
-          ? "No suitable printer is available for these options. This job will be created as manual work."
-          : "No printer is currently online. This job will be created as manual work.",
+        bindingRequiresManual
+          ? "Binding jobs are handled as manual work by the shop."
+          : hasOnlinePrinter
+            ? "No suitable printer is available for these options. This job will be created as manual work."
+            : "No printer is currently online. This job will be created as manual work.",
       );
     }
 
