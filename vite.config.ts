@@ -7,6 +7,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    server: {
+      host: "0.0.0.0",
+      port: 5174,
+    },
     define: {
       "import.meta.env.API_BASE_URL": JSON.stringify(env.API_BASE_URL ?? ""),
       "import.meta.env.WS_BASE_URL": JSON.stringify(env.WS_BASE_URL ?? ""),
