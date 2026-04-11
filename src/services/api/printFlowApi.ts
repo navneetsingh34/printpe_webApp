@@ -1,7 +1,4 @@
-import { apiRequest, ApiError } from "./httpClient";
-import { getTokenBundle } from "../storage/tokenStorage";
-import type { UploadedFileResult } from "./filesApi";
-import { uploadDocument } from "./filesApi";
+import { apiRequest } from "./httpClient";
 
 export type CreatePrintJobInput = {
   shopId: string;
@@ -73,7 +70,6 @@ export type PaymentRecord = {
   razorpayPaymentId?: string;
 };
 
-// Export uploadDocument from filesApi for backward compatibility
 export { uploadDocument } from "./filesApi";
 
 export function createPrintJob(

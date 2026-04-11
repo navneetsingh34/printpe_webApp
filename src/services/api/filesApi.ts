@@ -32,7 +32,6 @@ export type FileUploadOptions = {
  */
 export async function uploadDocumentViaMulter(
   file: File,
-  onProgress?: (progress: number) => void,
 ): Promise<UploadedFileResult> {
   const tokens = await getTokenBundle();
   if (!tokens?.accessToken) {
@@ -165,16 +164,14 @@ export async function uploadDocument(
   const { method = "presigned", onProgress } = options;
 
   if (method === "multer") {
-    return uploadDocumentViaMulter(file, onProgress);
+    return uploadDocumentViaMulter(file);
   }
 
   // Try presigned URL approach
   try {
     const tokens = await getTokenBundle();
-    const currentUser = tokens ? { id: tokens.userId || "" } : null;
-
-    if (!currentUser?.id) {
-      throw new Error("User ID not available");
+    if (!tokens?.accessToken) {
+      throw new ApiError("Please sign in before uploading documents.", 401);
     }
 
     const presignedData = await getPresignedUploadUrl(
@@ -201,7 +198,7 @@ export async function uploadDocument(
   } catch (error) {
     // Fallback to multer if presigned URL fails
     console.warn("Presigned URL upload failed, falling back to multer:", error);
-    return uploadDocumentViaMulter(file, onProgress);
+    return uploadDocumentViaMulter(file);
   }
 }
 
