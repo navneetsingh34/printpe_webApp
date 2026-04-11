@@ -1,13 +1,7 @@
 import { apiRequest, ApiError } from "./httpClient";
 import { getTokenBundle } from "../storage/tokenStorage";
-
-export type UploadedFileResult = {
-  id: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  pageCount?: number | null;
-};
+import type { UploadedFileResult } from "./filesApi";
+import { uploadDocument } from "./filesApi";
 
 export type CreatePrintJobInput = {
   shopId: string;
@@ -26,6 +20,15 @@ export type CreatePrintJobInput = {
       fileName: string;
       pageCount: number;
       copies: number;
+      assignedPage?: number;
+      previewTransform?: {
+        centerXPct: number;
+        centerYPct: number;
+        widthPct: number;
+        heightPct: number;
+        rotationDeg: number;
+        zoomPct: number;
+      };
     }>;
   };
 };
@@ -70,23 +73,8 @@ export type PaymentRecord = {
   razorpayPaymentId?: string;
 };
 
-export async function uploadDocument(file: File): Promise<UploadedFileResult> {
-  const tokens = await getTokenBundle();
-  if (!tokens?.accessToken) {
-    throw new ApiError("Please sign in before uploading documents.", 401);
-  }
-
-  const body = new FormData();
-  body.append("file", file);
-  return apiRequest<UploadedFileResult>(
-    "/files/upload",
-    {
-      method: "POST",
-      body,
-    },
-    { auth: true },
-  );
-}
+// Export uploadDocument from filesApi for backward compatibility
+export { uploadDocument } from "./filesApi";
 
 export function createPrintJob(
   input: CreatePrintJobInput,
