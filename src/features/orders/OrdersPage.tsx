@@ -22,7 +22,11 @@ const TRACK_STATUSES = [
   "ready_for_pickup",
 ] as const;
 
-type DisplayStatus = (typeof TRACK_STATUSES)[number] | "picked_up" | "cancelled";
+type DisplayStatus =
+  | (typeof TRACK_STATUSES)[number]
+  | "pending_payment"
+  | "picked_up"
+  | "cancelled";
 type QueueInfo = { position: number | null; estimatedMinutes: number | null };
 type OrderTab = "latest" | "old";
 
@@ -33,6 +37,7 @@ const STATUS_CONFIG: Record<
   DisplayStatus,
   { icon: string; color: string; bgColor: string }
 > = {
+  pending_payment: { icon: "🕒", color: "#92400e", bgColor: "#fef3c7" },
   paid: { icon: "💳", color: "#8b5cf6", bgColor: "#f3e8ff" },
   queued: { icon: "⏳", color: "#f59e0b", bgColor: "#fef3c7" },
   printed: { icon: "🖨️", color: "#10b981", bgColor: "#d1fae5" },
@@ -46,9 +51,9 @@ function normalizeTrackingStatus(rawStatus: string): DisplayStatus {
     .trim()
     .toLowerCase();
   if (!status) return "queued";
+  if (status === "pending_payment") return "pending_payment";
   if (status === "cancelled") return "cancelled";
   if (
-    status === "pending_payment" ||
     status === "payment_failed" ||
     status === "failed_payment" ||
     status === "payment_cancelled"
@@ -89,6 +94,7 @@ function titleCase(input: string): string {
 }
 
 function formatStatusLabel(status: DisplayStatus): string {
+  if (status === "pending_payment") return "Payment pending";
   if (status === "ready_for_pickup") return "Collect now";
   if (status === "picked_up") return "Picked up";
   if (status === "printed") return "Printing";
