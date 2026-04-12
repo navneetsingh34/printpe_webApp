@@ -2045,7 +2045,7 @@ export function PrintPage() {
         normalizedMessage.includes("dismissed") ||
         normalizedMessage.includes("cancel") ||
         normalizedMessage.includes("closed");
-      const canReconcile = Boolean(currentOrderId) && !isCancelled;
+      const canReconcile = Boolean(currentOrderId);
 
       if (canReconcile) {
         try {
