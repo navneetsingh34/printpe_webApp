@@ -14,7 +14,6 @@ export function RegisterPage() {
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
-    phone: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -109,7 +108,6 @@ export function RegisterPage() {
       const response = await signUp({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
-        phone: form.phone.trim() || undefined,
         email: form.email.trim().toLowerCase(),
         password: form.password,
         role: "user",
@@ -158,11 +156,6 @@ export function RegisterPage() {
           placeholder="Last name"
           value={form.lastName}
           onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))}
-        />
-        <input
-          placeholder="Phone (optional)"
-          value={form.phone}
-          onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
         />
         <input
           placeholder="Email"
