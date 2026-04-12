@@ -46,6 +46,8 @@ export type PaymentOrderResult = {
   jobNumber?: string;
   printCost?: number;
   convenienceFee?: number;
+  platformFee?: number;
+  coverPageFee?: number;
   totalAmount?: number;
 };
 
