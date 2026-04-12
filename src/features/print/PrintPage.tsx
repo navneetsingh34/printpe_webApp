@@ -40,6 +40,8 @@ type PaymentPhase =
 
 const DUPLICATE_FILE_WARNING =
   "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.";
+const DOC_UNSUPPORTED_MESSAGE =
+  "DOC/DOCX files are not supported right now. They may cause formatting issues. Please convert your file to PDF before uploading.";
 
 type PrintPageLocationState = {
   resumeFromPreview?: boolean;
@@ -227,12 +229,16 @@ function normalizePricing(
 function validateFile(file: File): string | null {
   const allowedDocMimeTypes = [
     "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "image/jpeg",
     "image/png",
   ];
-  const allowedDocExtensions = new Set(["pdf", "doc", "docx"]);
+  const allowedDocExtensions = new Set(["pdf"]);
+  const blockedWordMimeTypes = new Set([
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-word.document.macroenabled.12",
+  ]);
+  const blockedWordExtensions = new Set(["doc", "docx", "dot", "dotx"]);
   const allowedImageExtensions = new Set([
     "jpg",
     "jpeg",
@@ -248,12 +254,15 @@ function validateFile(file: File): string | null {
   ]);
   const maxBytes = 50 * 1024 * 1024;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (blockedWordMimeTypes.has(file.type) || blockedWordExtensions.has(extension)) {
+    return DOC_UNSUPPORTED_MESSAGE;
+  }
   const isAllowedMimeType = allowedDocMimeTypes.includes(file.type);
   const isAllowedDocExtension = allowedDocExtensions.has(extension);
   const isAllowedImageExtension = allowedImageExtensions.has(extension);
 
   if (!isAllowedMimeType && !isAllowedDocExtension && !isAllowedImageExtension) {
-    return "Only PDF, DOC, DOCX, JPG, and PNG files are supported.";
+    return "Only PDF, JPG, and PNG files are supported.";
   }
 
   if (file.size > maxBytes) {
@@ -1568,6 +1577,9 @@ export function PrintPage() {
       if (fileError) {
         setFiles([]);
         setError(fileError);
+        if (fileError === DOC_UNSUPPORTED_MESSAGE) {
+          window.alert(fileError);
+        }
         return;
       }
     }
@@ -1597,6 +1609,9 @@ export function PrintPage() {
       const fileError = validateFile(candidate);
       if (fileError) {
         setError(fileError);
+        if (fileError === DOC_UNSUPPORTED_MESSAGE) {
+          window.alert(fileError);
+        }
         return;
       }
     }
@@ -2167,7 +2182,7 @@ export function PrintPage() {
             >
               <div className="step-number">1</div>
               <h4>Upload</h4>
-              <p>Choose your file (PDF, DOC, DOCX, JPG, PNG)</p>
+              <p>Choose your file (PDF, JPG, PNG)</p>
             </button>
 
             <div className="step-arrow">→</div>
@@ -2374,7 +2389,7 @@ export function PrintPage() {
                     <div className="upload-icon">📤</div>
                     <h4>Drop files here</h4>
                     <p className="upload-subtitle">or click to browse</p>
-                    <p className="file-hints">PDF, DOC, DOCX, JPG, PNG • Max 50MB</p>
+                    <p className="file-hints">PDF, JPG, PNG • Max 50MB</p>
                   </div>
                 )}
 
@@ -2383,7 +2398,7 @@ export function PrintPage() {
                   className="file-input-upload"
                   style={{ display: "none" }}
                   multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   onChange={(e) => {
                     const selected = Array.from(e.target.files ?? []);
                     void onPickFiles(selected);
@@ -2396,7 +2411,7 @@ export function PrintPage() {
                   className="file-input-add-more"
                   style={{ display: "none" }}
                   multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   onChange={(e) => {
                     const selected = Array.from(e.target.files ?? []);
                     void onAppendFiles(selected);
@@ -2416,8 +2431,8 @@ export function PrintPage() {
                   </p>
                   <ul>
                     <li>
-                      Documents will not format automatically. Make sure layout
-                      is final.
+                      DOC/DOCX files are not supported right now because they
+                      may cause formatting issues. Convert to PDF before upload.
                     </li>
                     <li>
                       Check margins, page size, and line spacing before upload.
