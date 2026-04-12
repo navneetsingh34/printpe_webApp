@@ -6,6 +6,7 @@ export type OrderUpdatedPayload = {
   jobId?: string;
   status?: string;
   queuePosition?: number | null;
+  estimatedMinutes?: number | null;
   estimatedReadyTime?: string | null;
 };
 

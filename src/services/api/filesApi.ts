@@ -7,6 +7,8 @@ export type UploadedFileResult = {
   mimeType: string;
   size: number;
   pageCount?: number | null;
+  processingStatus?: "uploading" | "processing" | "converted" | "failed";
+  processingError?: string | null;
 };
 
 export type PresignedUrlResponse = {
@@ -191,7 +193,6 @@ export async function uploadDocument(
     // Finalize the upload with backend to extract page count and process conversions
     const finalizeResponse = await finalizePresignedUpload(
       presignedData.fileId,
-      file,
     );
 
     return finalizeResponse;
@@ -203,25 +204,20 @@ export async function uploadDocument(
 }
 
 /**
- * Finalize presigned upload by sending file for page count detection and processing
+ * Finalize presigned upload and trigger async backend processing
  */
 export async function finalizePresignedUpload(
   fileId: string,
-  file: File,
 ): Promise<UploadedFileResult> {
   const tokens = await getTokenBundle();
   if (!tokens?.accessToken) {
     throw new ApiError("Please sign in to finalize uploads.", 401);
   }
 
-  const body = new FormData();
-  body.append("file", file);
-
   return apiRequest<UploadedFileResult>(
     `/files/${fileId}/finalize`,
     {
       method: "PATCH",
-      body,
     },
     { auth: true },
   );

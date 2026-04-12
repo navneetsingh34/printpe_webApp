@@ -91,12 +91,31 @@ function titleCase(input: string): string {
 function formatStatusLabel(status: DisplayStatus): string {
   if (status === "ready_for_pickup") return "Collect now";
   if (status === "picked_up") return "Picked up";
+  if (status === "printed") return "Printing";
   return titleCase(status);
 }
 
 function formatTimelineLabel(status: (typeof TRACK_STATUSES)[number]): string {
   if (status === "ready_for_pickup") return "Collect";
+  if (status === "printed") return "Printing";
   return titleCase(status);
+}
+
+function resolveOrderEtaMinutes(order: OrderItem): number | null {
+  const etaMinutes = Number(order.etaMinutes);
+  if (Number.isFinite(etaMinutes)) {
+    return Math.max(0, Math.floor(etaMinutes));
+  }
+
+  if (order.estimatedReadyTime) {
+    const etaTs = new Date(order.estimatedReadyTime).getTime();
+    if (!Number.isNaN(etaTs)) {
+      const remainingMs = etaTs - Date.now();
+      return Math.max(0, Math.ceil(remainingMs / 60000));
+    }
+  }
+
+  return null;
 }
 
 function getProgressPercentage(status: DisplayStatus): number {
@@ -239,6 +258,7 @@ export function OrdersPage() {
         );
 
         if (
+          payload.estimatedMinutes !== undefined ||
           payload.queuePosition !== undefined ||
           payload.estimatedReadyTime !== undefined
         ) {
@@ -248,11 +268,16 @@ export function OrdersPage() {
               estimatedMinutes: null,
             };
             const nextEstimatedMinutes =
-              payload.estimatedReadyTime !== undefined
-                ? typeof payload.estimatedReadyTime === "string"
-                  ? parseInt(payload.estimatedReadyTime, 10) || null
-                  : payload.estimatedReadyTime
-                : current.estimatedMinutes;
+              payload.estimatedMinutes !== undefined
+                ? payload.estimatedMinutes
+                : payload.estimatedReadyTime !== undefined
+                  ? (() => {
+                      const etaTs = new Date(String(payload.estimatedReadyTime)).getTime();
+                      if (Number.isNaN(etaTs)) return null;
+                      const remainingMs = etaTs - Date.now();
+                      return Math.max(0, Math.ceil(remainingMs / 60000));
+                    })()
+                  : current.estimatedMinutes;
             return {
               ...prev,
               [targetId]: {
@@ -270,6 +295,7 @@ export function OrdersPage() {
       };
 
       socket.on("job:updated", onOrderUpdate);
+      socket.on("job_updated", onOrderUpdate);
       socket.on("queue:position-update", onOrderUpdate);
       disconnectSocket = () => socket.disconnect();
     };
@@ -432,7 +458,7 @@ export function OrdersPage() {
               const statusConfig = STATUS_CONFIG[displayStatus];
 
               const estimatedMinutes =
-                queueMap[order.id]?.estimatedMinutes ?? order.queuePosition;
+                queueMap[order.id]?.estimatedMinutes ?? resolveOrderEtaMinutes(order);
               const isRecentUpdate =
                 lastUpdateTime[order.id] &&
                 Date.now() - lastUpdateTime[order.id] < 5000;
@@ -631,7 +657,7 @@ export function OrdersPage() {
             const displayStatus = normalizeTrackingStatus(order.status);
             const statusConfig = STATUS_CONFIG[displayStatus];
             const estimatedMinutes =
-              queueMap[order.id]?.estimatedMinutes ?? order.queuePosition;
+              queueMap[order.id]?.estimatedMinutes ?? resolveOrderEtaMinutes(order);
 
             return (
               <article

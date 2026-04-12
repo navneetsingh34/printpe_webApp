@@ -32,6 +32,7 @@ function normalizeStatus(rawStatus: string): string {
     .trim()
     .toLowerCase();
   if (!status) return "queued";
+  if (status === "printed") return "printing";
   if (status === "ready_for_pickup") return "collect now";
   return status.replaceAll("_", " ");
 }
