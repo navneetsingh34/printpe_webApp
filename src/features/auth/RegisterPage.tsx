@@ -52,13 +52,6 @@ export function RegisterPage() {
       return;
     }
 
-    if (!window.sessionStorage.getItem(consentStorageKey)) {
-      setError(
-        "Please accept the terms and privacy policy before continuing with Google.",
-      );
-      return;
-    }
-
     setLoading(true);
     setError("");
     void registerWithGoogle({ idToken: idTokenFromHash, acceptedTerms: true })
@@ -76,13 +69,6 @@ export function RegisterPage() {
 
   const onGoogleSignUp = () => {
     setError("");
-    if (!acceptedTerms) {
-      setError(
-        "Please accept the terms and privacy policy before continuing with Google.",
-      );
-      return;
-    }
-
     window.sessionStorage.setItem(consentStorageKey, "true");
     const returnUrl =
       env.googleCallbackUrl ||
@@ -230,7 +216,7 @@ export function RegisterPage() {
           className="btn-secondary"
           type="button"
           onClick={onGoogleSignUp}
-          disabled={loading || !acceptedTerms}
+          disabled={loading}
         >
           <span className="btn-with-icon">
             <GoogleLogoIcon />
