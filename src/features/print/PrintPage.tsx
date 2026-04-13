@@ -185,7 +185,6 @@ function defaultPricing(): ShopPricingConfig {
     ],
     bindings: [
       { id: "none", label: "None", price: 0, enabled: true },
-      { id: "staple", label: "Staple", price: 5, enabled: true },
       { id: "spiral", label: "Spiral", price: 15, enabled: true },
     ],
   };
@@ -211,12 +210,14 @@ function normalizePricing(
 
   const bindings =
     Array.isArray(value.bindings) && value.bindings.length > 0
-      ? value.bindings.map((item) => ({
-          id: item.id || "binding",
-          label: item.label || "Binding",
-          price: Number(item.price ?? 0) || 0,
-          enabled: item.enabled !== false,
-        }))
+      ? value.bindings
+          .map((item) => ({
+            id: item.id || "binding",
+            label: item.label || "Binding",
+            price: Number(item.price ?? 0) || 0,
+            enabled: item.enabled !== false,
+          }))
+          .filter((item) => item.id !== "staple" && item.label.toLowerCase() !== "staple")
       : defaults.bindings;
 
   if (!bindings.some((item) => item.id === "none")) {
@@ -1515,7 +1516,7 @@ export function PrintPage() {
     [pricing],
   );
   const bindingOptions = useMemo(
-    () => pricing?.bindings?.filter((item) => item.enabled) ?? [],
+    () => pricing?.bindings?.filter((item) => item.enabled && item.id !== "none") ?? [],
     [pricing],
   );
 
