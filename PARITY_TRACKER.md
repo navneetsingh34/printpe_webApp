@@ -1,6 +1,6 @@
-# PrintQ WebApp Parity Tracker
+# PrintPe WebApp Parity Tracker
 
-This tracker maps PrintQ_App parity against PrintQ_WebApp and marks what is done, partially done, or pending.
+This tracker maps PrintPe_App parity against PrintPe_WebApp and marks what is done, partially done, or pending.
 
 ## 1) Architecture and Core Setup
 

@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import {
   getMyOrders,
   getOrderQueuePosition,
+  reportShop,
 } from "../../services/api/ordersApi";
 import { OrderItem } from "../../shared/types/order";
 import { BackButton } from "../../shared/ui/BackButton";
@@ -15,6 +16,22 @@ type LocationState = {
   order?: OrderItem;
   queueInfo?: QueueInfo;
 };
+
+type ReportFormState = {
+  issueCode: string;
+  customIssue: string;
+  details: string;
+};
+
+const ISSUE_CODES = [
+  { code: "quality_issue", label: "Quality Issue (blurry, wrong colors, etc.)" },
+  { code: "order_not_fulfilled", label: "Order Not Fulfilled" },
+  { code: "wrong_order", label: "Wrong Order Delivered" },
+  { code: "payment_issue", label: "Payment Issue" },
+  { code: "unprofessional_behavior", label: "Unprofessional Behavior" },
+  { code: "safety_concern", label: "Safety or Health Concern" },
+  { code: "other", label: "Other Issue" },
+];
 
 function formatCurrency(value: number): string {
   return `Rs ${Number(value || 0).toFixed(2)}`;
@@ -31,8 +48,11 @@ function normalizeStatus(rawStatus: string): string {
   const status = String(rawStatus || "")
     .trim()
     .toLowerCase();
-  if (!status) return "queued";
-  if (status === "ready_for_pickup") return "collect now";
+  if (!status) return "order";
+  if (status === "pending_payment") return "order";
+  if (status === "queued" || status === "processing") return "printing";
+  if (status === "printed" || status === "ready_for_pickup") return "printed";
+  if (status === "picked_up") return "collected";
   return status.replaceAll("_", " ");
 }
 
@@ -109,6 +129,15 @@ export function OrderDetailsPage() {
   const [queueInfo, setQueueInfo] = useState<QueueInfo>(
     state?.queueInfo ?? { position: null, estimatedMinutes: null },
   );
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportFormState, setReportFormState] = useState<ReportFormState>({
+    issueCode: "",
+    customIssue: "",
+    details: "",
+  });
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [reportSuccess, setReportSuccess] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -166,6 +195,46 @@ export function OrderDetailsPage() {
       mounted = false;
     };
   }, [orderId, state?.order, state?.queueInfo]);
+
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order || reportSubmitting) return;
+
+    if (!reportFormState.issueCode.trim()) {
+      setReportError("Please select an issue type");
+      return;
+    }
+
+    setReportSubmitting(true);
+    setReportError("");
+    setReportSuccess(false);
+
+    try {
+      await reportShop({
+        shopId: order.shopId,
+        issueCode: reportFormState.issueCode,
+        customIssue: reportFormState.customIssue || undefined,
+        details: reportFormState.details || undefined,
+        printJobId: order.id,
+      });
+
+      setReportSuccess(true);
+      setReportFormState({ issueCode: "", customIssue: "", details: "" });
+      
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportSuccess(false);
+      }, 2000);
+    } catch (submitError) {
+      setReportError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Failed to submit report. Please try again.",
+      );
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
 
   const statusText = useMemo(
     () => (order ? normalizeStatus(order.status) : "-"),
@@ -238,8 +307,133 @@ export function OrderDetailsPage() {
           >
             Download PDF
           </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setShowReportModal(true)}
+          >
+            Report Issue
+          </button>
         </div>
       </article>
+
+      {showReportModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowReportModal(false)}
+        >
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "500px" }}
+          >
+            <div className="modal-header">
+              <h3>Report an Issue</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setShowReportModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleReportSubmit}>
+              <div className="form-group">
+                <label htmlFor="issueCode">Issue Type *</label>
+                <select
+                  id="issueCode"
+                  value={reportFormState.issueCode}
+                  onChange={(e) =>
+                    setReportFormState({
+                      ...reportFormState,
+                      issueCode: e.target.value,
+                    })
+                  }
+                  disabled={reportSubmitting}
+                >
+                  <option value="">Select an issue type...</option>
+                  {ISSUE_CODES.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="customIssue">Issue Summary</label>
+                <input
+                  id="customIssue"
+                  type="text"
+                  placeholder="Brief summary of the issue"
+                  value={reportFormState.customIssue}
+                  onChange={(e) =>
+                    setReportFormState({
+                      ...reportFormState,
+                      customIssue: e.target.value,
+                    })
+                  }
+                  disabled={reportSubmitting}
+                  maxLength={300}
+                />
+                <small style={{ color: "#999" }}>
+                  {reportFormState.customIssue.length}/300
+                </small>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="details">Additional Details</label>
+                <textarea
+                  id="details"
+                  placeholder="Provide more details about what happened..."
+                  value={reportFormState.details}
+                  onChange={(e) =>
+                    setReportFormState({
+                      ...reportFormState,
+                      details: e.target.value,
+                    })
+                  }
+                  disabled={reportSubmitting}
+                  maxLength={1000}
+                  rows={4}
+                />
+                <small style={{ color: "#999" }}>
+                  {reportFormState.details.length}/1000
+                </small>
+              </div>
+
+              {reportError && (
+                <div className="form-error">{reportError}</div>
+              )}
+
+              {reportSuccess && (
+                <div className="form-success">
+                  ✓ Report submitted successfully. Thank you!
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowReportModal(false)}
+                  disabled={reportSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={reportSubmitting || !reportFormState.issueCode}
+                >
+                  {reportSubmitting ? "Submitting..." : "Submit Report"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -14,7 +14,6 @@ export function RegisterPage() {
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
-    phone: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -52,13 +51,6 @@ export function RegisterPage() {
       return;
     }
 
-    if (!window.sessionStorage.getItem(consentStorageKey)) {
-      setError(
-        "Please accept the terms and privacy policy before continuing with Google.",
-      );
-      return;
-    }
-
     setLoading(true);
     setError("");
     void registerWithGoogle({ idToken: idTokenFromHash, acceptedTerms: true })
@@ -76,17 +68,8 @@ export function RegisterPage() {
 
   const onGoogleSignUp = () => {
     setError("");
-    if (!acceptedTerms) {
-      setError(
-        "Please accept the terms and privacy policy before continuing with Google.",
-      );
-      return;
-    }
-
     window.sessionStorage.setItem(consentStorageKey, "true");
-    const returnUrl =
-      env.googleCallbackUrl ||
-      `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     const oauthApiBaseUrl = env.apiBaseUrl.replace(/\/$/, "");
     const oauthStartUrl = `${oauthApiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
     window.location.href = oauthStartUrl;
@@ -125,7 +108,6 @@ export function RegisterPage() {
       const response = await signUp({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
-        phone: form.phone.trim() || undefined,
         email: form.email.trim().toLowerCase(),
         password: form.password,
         role: "user",
@@ -174,11 +156,6 @@ export function RegisterPage() {
           placeholder="Last name"
           value={form.lastName}
           onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))}
-        />
-        <input
-          placeholder="Phone (optional)"
-          value={form.phone}
-          onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
         />
         <input
           placeholder="Email"
@@ -230,7 +207,7 @@ export function RegisterPage() {
           className="btn-secondary"
           type="button"
           onClick={onGoogleSignUp}
-          disabled={loading || !acceptedTerms}
+          disabled={loading}
         >
           <span className="btn-with-icon">
             <GoogleLogoIcon />

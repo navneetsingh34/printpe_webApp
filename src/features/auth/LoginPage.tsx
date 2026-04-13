@@ -1,14 +1,24 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "./auth-context";
 import { AuthFormLayout } from "./AuthFormLayout";
 import { PrinterLoading } from "../../shared/ui/PrinterLoading";
 import { env } from "../../services/api/env";
 import { GoogleLogoIcon } from "./GoogleLogoIcon";
 
+function getSafeRedirectPath(value: string | null): string {
+  const redirectPath = (value ?? "").trim();
+  if (!redirectPath.startsWith("/")) return "/";
+  if (redirectPath.startsWith("//")) return "/";
+  return redirectPath;
+}
+
 export function LoginPage() {
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectAfterLogin = getSafeRedirectPath(searchParams.get("redirect"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -45,7 +55,7 @@ export function LoginPage() {
     setError("");
     void signInWithGoogle({ idToken: idTokenFromHash })
       .then(() => {
-        navigate("/");
+        navigate(redirectAfterLogin, { replace: true });
       })
       .catch((e: unknown) => {
         setError((e as Error).message || "Google login failed.");
@@ -53,13 +63,11 @@ export function LoginPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, [navigate, signInWithGoogle]);
+  }, [navigate, redirectAfterLogin, signInWithGoogle]);
 
   const onGoogleLogin = () => {
     setError("");
-    const returnUrl =
-      env.googleCallbackUrl ||
-      `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     const oauthApiBaseUrl = env.apiBaseUrl.replace(/\/$/, "");
     const oauthStartUrl = `${oauthApiBaseUrl}/auth/google/mobile/start?mobileRedirectUri=${encodeURIComponent(returnUrl)}`;
     window.location.href = oauthStartUrl;
@@ -77,7 +85,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await signIn({ email: email.trim().toLowerCase(), password });
-      navigate("/");
+      navigate(redirectAfterLogin, { replace: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
