@@ -2,7 +2,7 @@
 
 ## Overview
 
-The PrintQ webapp now supports **both** file upload methods:
+The PrintPe webapp now supports **both** file upload methods:
 
 1. **Multer Upload** - Backend processes the upload
    - Best for: Smaller files, when you want backend to validate
@@ -256,7 +256,7 @@ Authorization: Bearer <token>
 AWS_REGION=ap-south-1
 AWS_ACCESS_KEY_ID=your-key
 AWS_SECRET_ACCESS_KEY=your-secret
-S3_BUCKET_NAME=printq-documents
+S3_BUCKET_NAME=printpe-documents
 S3_PRESIGNED_URL_EXPIRY=3600
 SOFFICE_BIN=/path/to/soffice (optional, for DOC/DOCX conversion)
 ```
@@ -265,8 +265,8 @@ SOFFICE_BIN=/path/to/soffice (optional, for DOC/DOCX conversion)
 ```
 API_BASE_URL=http://localhost:3000/api/v1
 WS_BASE_URL=http://localhost:3000
-AUTH_ACCESS_TOKEN_KEY=printq_access_token
-AUTH_REFRESH_TOKEN_KEY=printq_refresh_token
+AUTH_ACCESS_TOKEN_KEY=printpe_access_token
+AUTH_REFRESH_TOKEN_KEY=printpe_refresh_token
 ```
 
 ## Supported File Types

@@ -2025,8 +2025,8 @@ export function PrintPage() {
         key: env.razorpayKeyId,
         amount: order.amount,
         currency: order.currency || "INR",
-        name: env.razorpayMerchantName || "PrintQ",
-        description: `Print order ${createdJobNumber || order.jobNumber || "PrintQ"}`,
+        name: env.razorpayMerchantName || "PrintPe",
+        description: `Print order ${createdJobNumber || order.jobNumber || "PrintPe"}`,
         orderId: order.orderId,
         prefill: {
           name: [user?.firstName, user?.lastName].filter(Boolean).join(" "),
@@ -3098,7 +3098,7 @@ export function PrintPage() {
               ) : null}
 
               <button
-                className="btn-primary"
+                className="btn-primary btn-razorpay"
                 type="submit"
                 disabled={isSubmitting}
               >
