@@ -1,6 +1,6 @@
-# PrintQ WebApp
+# PrintPe WebApp
 
-Web implementation of PrintQ aligned to the PrintQ mobile app design and functionality.
+Web implementation of PrintPe aligned to the PrintPe mobile app design and functionality.
 
 ## Stack
 
@@ -25,8 +25,8 @@ Create .env from .env.example:
 ```
 API_BASE_URL=http://localhost:3000/api/v1
 WS_BASE_URL=http://localhost:3000
-AUTH_ACCESS_TOKEN_KEY=printq_access_token
-AUTH_REFRESH_TOKEN_KEY=printq_refresh_token
+AUTH_ACCESS_TOKEN_KEY=printpe_access_token
+AUTH_REFRESH_TOKEN_KEY=printpe_refresh_token
 ```
 
 ## Commands

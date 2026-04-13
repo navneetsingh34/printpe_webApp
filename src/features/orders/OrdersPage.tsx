@@ -16,16 +16,15 @@ import { getTokenBundle } from "../../services/storage/tokenStorage";
 import { PrinterLoading } from "../../shared/ui/PrinterLoading";
 
 const TRACK_STATUSES = [
+  "order",
   "paid",
-  "queued",
+  "printing",
   "printed",
-  "ready_for_pickup",
+  "collected",
 ] as const;
 
 type DisplayStatus =
   | (typeof TRACK_STATUSES)[number]
-  | "pending_payment"
-  | "picked_up"
   | "cancelled";
 type QueueInfo = { position: number | null; estimatedMinutes: number | null };
 type OrderTab = "latest" | "old";
@@ -37,12 +36,11 @@ const STATUS_CONFIG: Record<
   DisplayStatus,
   { icon: string; color: string; bgColor: string }
 > = {
-  pending_payment: { icon: "🕒", color: "#92400e", bgColor: "#fef3c7" },
+  order: { icon: "🕒", color: "#92400e", bgColor: "#fef3c7" },
   paid: { icon: "💳", color: "#8b5cf6", bgColor: "#f3e8ff" },
-  queued: { icon: "⏳", color: "#f59e0b", bgColor: "#fef3c7" },
+  printing: { icon: "⏳", color: "#f59e0b", bgColor: "#fef3c7" },
   printed: { icon: "🖨️", color: "#10b981", bgColor: "#d1fae5" },
-  ready_for_pickup: { icon: "✨", color: "#8a5220", bgColor: "#ffe9d3" },
-  picked_up: { icon: "✅", color: "#166534", bgColor: "#dcfce7" },
+  collected: { icon: "✅", color: "#166534", bgColor: "#dcfce7" },
   cancelled: { icon: "❌", color: "#ef4444", bgColor: "#fee2e2" },
 };
 
@@ -50,8 +48,8 @@ function normalizeTrackingStatus(rawStatus: string): DisplayStatus {
   const status = String(rawStatus || "")
     .trim()
     .toLowerCase();
-  if (!status) return "queued";
-  if (status === "pending_payment") return "pending_payment";
+  if (!status) return "order";
+  if (status === "pending_payment") return "order";
   if (status === "cancelled") return "cancelled";
   if (
     status === "payment_failed" ||
@@ -60,16 +58,17 @@ function normalizeTrackingStatus(rawStatus: string): DisplayStatus {
   ) {
     return "cancelled";
   }
-  if (status === "processing") return "queued";
-  if (status === "picked_up") return "picked_up";
+  if (status === "processing" || status === "queued") return "printing";
+  if (status === "printed" || status === "ready_for_pickup") return "printed";
+  if (status === "picked_up") return "collected";
   if (TRACK_STATUSES.includes(status as (typeof TRACK_STATUSES)[number])) {
     return status as DisplayStatus;
   }
-  return "queued";
+  return "order";
 }
 
 function getStatusIndex(status: DisplayStatus): number {
-  if (status === "picked_up") return TRACK_STATUSES.length - 1;
+  if (status === "collected") return TRACK_STATUSES.length - 1;
   const idx = TRACK_STATUSES.indexOf(status as (typeof TRACK_STATUSES)[number]);
   return idx < 0 ? 0 : idx;
 }
@@ -94,16 +93,17 @@ function titleCase(input: string): string {
 }
 
 function formatStatusLabel(status: DisplayStatus): string {
-  if (status === "pending_payment") return "Payment pending";
-  if (status === "ready_for_pickup") return "Collect now";
-  if (status === "picked_up") return "Picked up";
-  if (status === "printed") return "Printing";
+  if (status === "order") return "Order";
+  if (status === "printed") return "Printed";
+  if (status === "collected") return "Collected";
   return titleCase(status);
 }
 
 function formatTimelineLabel(status: (typeof TRACK_STATUSES)[number]): string {
-  if (status === "ready_for_pickup") return "Collect";
-  if (status === "printed") return "Printing";
+  if (status === "order") return "Order";
+  if (status === "printing") return "Printing";
+  if (status === "printed") return "Printed";
+  if (status === "collected") return "Collected";
   return titleCase(status);
 }
 
@@ -125,7 +125,7 @@ function resolveOrderEtaMinutes(order: OrderItem): number | null {
 }
 
 function getProgressPercentage(status: DisplayStatus): number {
-  if (status === "picked_up") return 100;
+  if (status === "collected") return 100;
   const statusIdx = TRACK_STATUSES.indexOf(
     status as (typeof TRACK_STATUSES)[number],
   );
@@ -597,7 +597,7 @@ export function OrdersPage() {
 
                   {/* Action Buttons */}
                   <div className="order-actions">
-                    {displayStatus === "ready_for_pickup" ? (
+                    {String(order.status || "").trim().toLowerCase() === "ready_for_pickup" ? (
                       <button
                         className="action-btn"
                         type="button"
@@ -615,6 +615,23 @@ export function OrdersPage() {
                       onClick={() => void onViewDocs(order.id)}
                     >
                       📄 View Docs
+                    </button>
+                    <button
+                      className="action-btn secondary"
+                      type="button"
+                      onClick={() =>
+                        navigate(`/orders/${encodeURIComponent(order.id)}`, {
+                          state: {
+                            order,
+                            queueInfo: queueMap[order.id] ?? {
+                              position: order.queuePosition ?? null,
+                              estimatedMinutes,
+                            },
+                          },
+                        })
+                      }
+                    >
+                      ⚠️ Report Issue
                     </button>
                   </div>
 

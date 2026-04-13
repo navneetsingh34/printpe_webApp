@@ -4,6 +4,7 @@ export type OrderItem = {
   status: string;
   totalPages: number;
   totalPrice: number;
+  shopId: string;
   queuePosition?: number | null;
   estimatedReadyTime?: string | null;
   etaMinutes?: number | null;

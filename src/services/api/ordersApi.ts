@@ -34,3 +34,28 @@ export function getOrderDocumentUrls(
     { auth: true },
   );
 }
+
+export type ReportShopParams = {
+  shopId: string;
+  issueCode: string;
+  customIssue?: string;
+  details?: string;
+  printJobId?: string;
+};
+
+export function reportShop(params: ReportShopParams): Promise<{ id: string }> {
+  return apiRequest(
+    '/reports/shops',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        shopId: params.shopId,
+        issueCode: params.issueCode,
+        customIssue: params.customIssue,
+        details: params.details,
+        printJobId: params.printJobId,
+      }),
+    },
+    { auth: true },
+  );
+}

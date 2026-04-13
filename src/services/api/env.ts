@@ -31,11 +31,11 @@ export const env = {
   googleWebClientId: optional(metaEnv.GOOGLE_WEB_CLIENT_ID),
   accessTokenKey: withDefault(
     metaEnv.AUTH_ACCESS_TOKEN_KEY,
-    "printq_access_token",
+    "printpe_access_token",
   ),
   refreshTokenKey: withDefault(
     metaEnv.AUTH_REFRESH_TOKEN_KEY,
-    "printq_refresh_token",
+    "printpe_refresh_token",
   ),
   razorpayKeyId: optional(metaEnv.RAZORPAY_KEY_ID),
   razorpayMerchantName: optional(metaEnv.RAZORPAY_MERCHANT_NAME),

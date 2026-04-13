@@ -18,10 +18,10 @@ export default defineConfig(({ mode }) => {
         env.GOOGLE_WEB_CLIENT_ID ?? "",
       ),
       "import.meta.env.AUTH_ACCESS_TOKEN_KEY": JSON.stringify(
-        env.AUTH_ACCESS_TOKEN_KEY ?? "printq_access_token",
+        env.AUTH_ACCESS_TOKEN_KEY ?? "printpe_access_token",
       ),
       "import.meta.env.AUTH_REFRESH_TOKEN_KEY": JSON.stringify(
-        env.AUTH_REFRESH_TOKEN_KEY ?? "printq_refresh_token",
+        env.AUTH_REFRESH_TOKEN_KEY ?? "printpe_refresh_token",
       ),
       "import.meta.env.RAZORPAY_KEY_ID": JSON.stringify(
         env.RAZORPAY_KEY_ID ?? "",
