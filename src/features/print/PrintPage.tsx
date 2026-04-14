@@ -39,7 +39,7 @@ type PaymentPhase =
   | "failed";
 
 const DUPLICATE_FILE_WARNING =
-  "This file is already uploaded. If you want multiple copies, continue to configuration and increase the copies setting.";
+  "This file is already uploaded. If you want multiple copies, continue to configuration and adjust the document or page copy count.";
 const DOC_UNSUPPORTED_MESSAGE =
   "DOC/DOCX files are not supported right now. They may cause formatting issues. Please convert your file to PDF before uploading.";
 
@@ -279,6 +279,15 @@ function applyDoubleSidedDiscount(
 ): number {
   if (!doubleSided || discountPercent <= 0) return cost;
   return cost - cost * (discountPercent / 100);
+}
+
+function normalizeCopiesValue(value: unknown, fallback = 1): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return Math.max(1, Math.floor(fallback));
+  }
+
+  return Math.max(1, Math.floor(parsed));
 }
 
 function formatFileSize(bytes: number): string {
@@ -676,6 +685,8 @@ export function PrintPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [filePages, setFilePages] = useState(1);
   const [copies, setCopies] = useState(1);
+  const [documentCopiesByFile, setDocumentCopiesByFile] = useState<Record<string, number>>({});
+  const [imageCopiesByPage, setImageCopiesByPage] = useState<Record<number, number>>({});
   const [color, setColor] = useState(false);
   const [doubleSided, setDoubleSided] = useState(false);
   const [paperSize, setPaperSize] = useState("A4");
@@ -925,6 +936,26 @@ export function PrintPage() {
       return next;
     });
 
+    setImageCopiesByPage((prev) => {
+      const next: Record<number, number> = {};
+
+      Object.entries(prev).forEach(([rawPage, rawCopies]) => {
+        let page = Math.max(1, Math.floor(Number(rawPage) || 1));
+        const normalizedCopies = normalizeCopiesValue(rawCopies, copies);
+
+        if (page === pageNumber) {
+          page = fallbackTarget;
+        }
+        if (page > pageNumber) {
+          page -= 1;
+        }
+
+        next[page] = Math.max(next[page] ?? 0, normalizedCopies);
+      });
+
+      return next;
+    });
+
     setExtraImagePages((prev) => Math.max(0, prev - 1));
     setSelectedPreviewPage((prev) => {
       if (prev === null) return prev;
@@ -1113,6 +1144,53 @@ export function PrintPage() {
       return imagePageBuckets[0].pageNumber;
     });
   }, [imagePageBuckets]);
+
+  useEffect(() => {
+    setDocumentCopiesByFile((prev) => {
+      const next: Record<string, number> = {};
+
+      for (const file of files) {
+        if (isImageFile(file)) {
+          continue;
+        }
+
+        const signature = getFileSignature(file);
+        next[signature] = normalizeCopiesValue(prev[signature] ?? copies, copies);
+      }
+
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((key) => prev[key] === next[key])
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [copies, files]);
+
+  useEffect(() => {
+    setImageCopiesByPage((prev) => {
+      const next: Record<number, number> = {};
+
+      for (const bucket of imagePageBuckets) {
+        next[bucket.pageNumber] = normalizeCopiesValue(prev[bucket.pageNumber] ?? copies, copies);
+      }
+
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next).map(Number);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((key) => prev[key] === next[key])
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [copies, imagePageBuckets]);
 
   useEffect(() => {
     if (!isImagePreview || !previewUrl) {
@@ -1539,7 +1617,29 @@ export function PrintPage() {
 
   const estimate = useMemo(() => {
     const tier: TieredRate = color ? selectedPaper.color : selectedPaper.bw;
-    const totalSheets = Math.max(0, filePages * copies);
+    let totalSheets = 0;
+    const imageSheetCopiesByPage = new Map<number, number>();
+
+    files.forEach((file, index) => {
+      if (isImageFile(file)) {
+        const signature = getFileSignature(file);
+        const fallbackPage = Math.floor(index / 2) + 1;
+        const pageNumber = Math.max(1, Number(imagePageByFile[signature] ?? fallbackPage) || 1);
+        const currentCopies = imageSheetCopiesByPage.get(pageNumber) ?? 0;
+        const nextCopies = normalizeCopiesValue(imageCopiesByPage[pageNumber] ?? copies, copies);
+        imageSheetCopiesByPage.set(pageNumber, Math.max(currentCopies, nextCopies));
+        return;
+      }
+
+      const signature = getFileSignature(file);
+      const docCopies = normalizeCopiesValue(documentCopiesByFile[signature] ?? copies, copies);
+      totalSheets += docCopies;
+    });
+
+    for (const value of imageSheetCopiesByPage.values()) {
+      totalSheets += value;
+    }
+
     const firstBand = Math.min(totalSheets, Math.max(0, tier.firstNPages));
     const remaining = Math.max(0, totalSheets - firstBand);
     const basePrintCost =
@@ -1563,7 +1663,7 @@ export function PrintPage() {
       totalSheets,
       bindingLabel: selectedBinding?.label ?? "None",
     };
-  }, [color, copies, doubleSided, filePages, selectedBinding, selectedPaper]);
+  }, [color, copies, documentCopiesByFile, doubleSided, files, imageCopiesByPage, imagePageByFile, selectedBinding, selectedPaper]);
 
   const onPickFiles = async (nextFiles: File[]) => {
     setError("");
@@ -1865,6 +1965,7 @@ export function PrintPage() {
     let uploadedFiles: Array<{
       id: string;
       fileName: string;
+      signature: string;
       pageCount: number;
       previewTransform?: PreviewPrintTransform;
       assignedPage?: number;
@@ -1946,6 +2047,7 @@ export function PrintPage() {
           uploadedFiles.push({
             id: uploaded.id,
             fileName: currentFile.name,
+            signature,
             pageCount,
             previewTransform: previewTransformForPrint,
             assignedPage: isImageFile(currentFile) ? assignedPage : undefined,
@@ -1987,14 +2089,24 @@ export function PrintPage() {
           doubleSided,
           paperSize,
           binding: binding || undefined,
-          documentQueue: uploadedFiles.map((item) => ({
-            fileId: item.id,
-            fileName: item.fileName,
-            pageCount: item.pageCount,
-            copies,
-            previewTransform: item.previewTransform,
-            assignedPage: item.assignedPage,
-          })),
+          documentQueue: uploadedFiles.map((item) => {
+            const isImage = Boolean(item.assignedPage)
+            const effectiveCopies = isImage
+              ? normalizeCopiesValue(
+                  imageCopiesByPage[Math.max(1, Math.floor(Number(item.assignedPage) || 1))] ?? copies,
+                  copies,
+                )
+              : normalizeCopiesValue(documentCopiesByFile[item.signature] ?? copies, copies)
+
+            return {
+              fileId: item.id,
+              fileName: item.fileName,
+              pageCount: item.pageCount,
+              copies: effectiveCopies,
+              previewTransform: item.previewTransform,
+              assignedPage: item.assignedPage,
+            }
+          }),
         },
       });
 
@@ -2484,13 +2596,73 @@ export function PrintPage() {
                     )}
                     )
                   </p>
-                  <ul>
-                    {files.map((item, index) => (
-                      <li key={`${item.name}-${item.size}-${index}`}>
-                        {index + 1}. {item.name}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="upload-documents-copy-list">
+                    {files.filter((item) => !isImageFile(item)).length > 0 ? (
+                      files
+                        .filter((item) => !isImageFile(item))
+                        .map((item, index) => {
+                          const signature = getFileSignature(item)
+                          const itemCopies = normalizeCopiesValue(documentCopiesByFile[signature] ?? copies, copies)
+
+                          return (
+                            <div key={`${item.name}-${item.size}-${index}`} className="upload-document-copy-row">
+                              <div className="upload-document-copy-label">
+                                <span>{index + 1}. {item.name}</span>
+                              </div>
+                              <div className="copy-input-spinner">
+                                <button
+                                  type="button"
+                                  className="spinner-btn spinner-down"
+                                  onClick={() =>
+                                    setDocumentCopiesByFile((prev) => ({
+                                      ...prev,
+                                      [signature]: Math.max(1, itemCopies - 1),
+                                    }))
+                                  }
+                                  title="Decrease"
+                                  aria-label={`Decrease copies for ${item.name}`}
+                                >
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  inputMode="numeric"
+                                  value={itemCopies}
+                                  onChange={(event) =>
+                                    setDocumentCopiesByFile((prev) => ({
+                                      ...prev,
+                                      [signature]: normalizeCopiesValue(event.target.value, itemCopies),
+                                    }))
+                                  }
+                                  className="upload-document-copy-input"
+                                  aria-label={`Copies for ${item.name}`}
+                                />
+                                <button
+                                  type="button"
+                                  className="spinner-btn spinner-up"
+                                  onClick={() =>
+                                    setDocumentCopiesByFile((prev) => ({
+                                      ...prev,
+                                      [signature]: itemCopies + 1,
+                                    }))
+                                  }
+                                  title="Increase"
+                                  aria-label={`Increase copies for ${item.name}`}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })
+                    ) : null}
+                  </div>
+                  {files.some((item) => isImageFile(item)) ? (
+                    <p className="upload-files-summary-note">
+                      Image page copies are set in the Page Assignment panel below.
+                    </p>
+                  ) : null}
                 </article>
               ) : null}
 
@@ -2502,27 +2674,31 @@ export function PrintPage() {
                 <div className="options-row">
                   <div className="option-card">
                     <label className="option-label">📄 Copies</label>
-                    <div className="number-input-group">
+                    <div className="number-input-group number-input-group-prominent">
                       <button
                         type="button"
                         onClick={() => setCopies(Math.max(1, copies - 1))}
                         className="number-btn"
+                        aria-label="Decrease total copies"
                       >
                         −
                       </button>
                       <input
                         type="number"
                         min={1}
+                        inputMode="numeric"
                         value={copies}
                         onChange={(e) =>
                           setCopies(Math.max(1, Number(e.target.value) || 1))
                         }
                         className="number-display"
+                        aria-label="Total copies"
                       />
                       <button
                         type="button"
                         onClick={() => setCopies(copies + 1)}
                         className="number-btn"
+                        aria-label="Increase total copies"
                       >
                         +
                       </button>
@@ -2804,6 +2980,54 @@ export function PrintPage() {
                                 Drop images here
                               </span>
                             )}
+
+                            <div className="print-page-group-footer">
+                              <span className="print-page-group-copy-label">Copies</span>
+                              <div className="copy-input-spinner">
+                                <button
+                                  type="button"
+                                  className="spinner-btn spinner-down"
+                                  onClick={() =>
+                                    setImageCopiesByPage((prev) => ({
+                                      ...prev,
+                                      [bucket.pageNumber]: Math.max(1, (prev[bucket.pageNumber] ?? copies) - 1),
+                                    }))
+                                  }
+                                  title="Decrease"
+                                  aria-label={`Decrease copies for page ${bucket.pageNumber}`}
+                                >
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  inputMode="numeric"
+                                  value={normalizeCopiesValue(imageCopiesByPage[bucket.pageNumber] ?? copies, copies)}
+                                  onChange={(event) =>
+                                    setImageCopiesByPage((prev) => ({
+                                      ...prev,
+                                      [bucket.pageNumber]: normalizeCopiesValue(event.target.value, copies),
+                                    }))
+                                  }
+                                  className="print-page-group-copy-input"
+                                  aria-label={`Copies for page ${bucket.pageNumber}`}
+                                />
+                                <button
+                                  type="button"
+                                  className="spinner-btn spinner-up"
+                                  onClick={() =>
+                                    setImageCopiesByPage((prev) => ({
+                                      ...prev,
+                                      [bucket.pageNumber]: normalizeCopiesValue(prev[bucket.pageNumber] ?? copies, copies) + 1,
+                                    }))
+                                  }
+                                  title="Increase"
+                                  aria-label={`Increase copies for page ${bucket.pageNumber}`}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
