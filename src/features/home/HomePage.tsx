@@ -49,9 +49,11 @@ export function HomePage() {
     }
     setError("");
     const finalQuery = searchQuery !== undefined ? searchQuery : query;
-    await (finalQuery.trim().length >= MIN_SEARCH_LENGTH
-      ? searchShops(finalQuery.trim())
-      : getAllShops())
+    await (
+      finalQuery.trim().length >= MIN_SEARCH_LENGTH
+        ? searchShops(finalQuery.trim())
+        : getAllShops()
+    )
       .then((result) => setShops(result))
       .catch((e) => setError((e as Error).message || "Failed to load shops"))
       .finally(() => {
@@ -236,10 +238,15 @@ export function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, latLng]);
 
-  const visibleShops = useMemo(
-    () => (mode === "all" ? shops : nearbyShops),
-    [mode, shops, nearbyShops],
-  );
+  const visibleShops = useMemo(() => {
+    if (mode === "all") {
+      return shops;
+    }
+
+    return nearbyShops.filter(
+      (shop) => (shopOnlineMap[shop.id] ?? shop.isActive) === true,
+    );
+  }, [mode, shops, nearbyShops, shopOnlineMap]);
 
   const sortedShops = useMemo(() => {
     const arr = [...visibleShops];
@@ -404,7 +411,11 @@ export function HomePage() {
                       navigate(`/print?shopId=${encodeURIComponent(shop.id)}`);
                     }}
                   >
-                    {isStatusPending ? "Checking" : isOnline ? "Select" : "Offline"}
+                    {isStatusPending
+                      ? "Checking"
+                      : isOnline
+                        ? "Select"
+                        : "Offline"}
                   </button>
                 </article>
               );
