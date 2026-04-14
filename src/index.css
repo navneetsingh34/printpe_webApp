@@ -1357,6 +1357,22 @@ a:focus-visible {
   color: #6b7280;
 }
 
+.status-badge-inline.loading {
+  background: rgba(148, 163, 184, 0.16);
+  color: #64748b;
+  min-width: 86px;
+  justify-content: center;
+}
+
+.status-skeleton-pill {
+  width: 58px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d8dee8 20%, #edf1f7 50%, #d8dee8 80%);
+  background-size: 200% 100%;
+  animation: shopStatusLoadingShimmer 1.2s linear infinite;
+}
+
 .address-inline {
   margin: 0;
   font-size: 13px;
@@ -1390,6 +1406,14 @@ a:focus-visible {
   background: #6b7280;
 }
 
+.status-dot-inline.loading {
+  width: 10px;
+  height: 10px;
+  background: linear-gradient(90deg, #c7d2e1 20%, #e5ebf4 50%, #c7d2e1 80%);
+  background-size: 200% 100%;
+  animation: shopStatusLoadingShimmer 1.2s linear infinite;
+}
+
 .distance-inline {
   font-size: 12px;
   color: var(--text-muted);
@@ -1405,6 +1429,10 @@ a:focus-visible {
   animation: statusPulse 2s ease-in-out infinite;
 }
 
+.btn-select-inline.loading {
+  opacity: 0.85;
+}
+
 @keyframes statusPulse {
   0%,
   100% {
@@ -1414,6 +1442,15 @@ a:focus-visible {
   50% {
     opacity: 0.5;
     transform: scale(1.2);
+  }
+}
+
+@keyframes shopStatusLoadingShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 

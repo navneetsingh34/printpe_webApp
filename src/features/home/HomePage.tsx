@@ -39,6 +39,7 @@ export function HomePage() {
   const [shopOnlineMap, setShopOnlineMap] = useState<Record<string, boolean>>(
     {},
   );
+  const [shopStatusLoading, setShopStatusLoading] = useState(true);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
@@ -153,15 +154,22 @@ export function HomePage() {
 
   useEffect(() => {
     let mounted = true;
+    setShopStatusLoading(true);
 
     const startSocket = async () => {
       const bundle = await getTokenBundle();
-      if (!bundle?.accessToken || !mounted) return;
+      if (!mounted) return;
+      if (!bundle?.accessToken) {
+        setShopStatusLoading(false);
+        return;
+      }
 
       const socket = connectShopStatusSocket(bundle.accessToken);
       socketRef.current = socket;
 
       socket.on("connect", () => {
+        if (!mounted) return;
+        setShopStatusLoading(true);
         socket.emit("status:subscribe", {});
       });
 
@@ -177,6 +185,7 @@ export function HomePage() {
             {},
           );
           setShopOnlineMap(next);
+          setShopStatusLoading(false);
         },
       );
 
@@ -186,6 +195,17 @@ export function HomePage() {
           ...prev,
           [payload.shopId]: payload.isOnline,
         }));
+        setShopStatusLoading(false);
+      });
+
+      socket.on("connect_error", () => {
+        if (!mounted) return;
+        setShopStatusLoading(false);
+      });
+
+      socket.on("disconnect", () => {
+        if (!mounted) return;
+        setShopStatusLoading(false);
       });
     };
 
@@ -329,7 +349,14 @@ export function HomePage() {
           </div>
           <div className="shops-list">
             {featuredShops.map((shop, idx) => {
-              const isOnline = shopOnlineMap[shop.id] ?? shop.isActive;
+              const hasRealtimeStatus = Object.prototype.hasOwnProperty.call(
+                shopOnlineMap,
+                shop.id,
+              );
+              const isStatusPending = shopStatusLoading && !hasRealtimeStatus;
+              const isOnline = hasRealtimeStatus
+                ? shopOnlineMap[shop.id]
+                : shop.isActive;
               return (
                 <article
                   key={shop.id}
@@ -338,12 +365,18 @@ export function HomePage() {
                 >
                   <div className="shop-name-status">
                     <h3>{shop.name}</h3>
-                    <span
-                      className={`status-badge-inline ${isOnline ? "online" : "offline"}`}
-                    >
-                      <span className="status-pulse" />
-                      {isOnline ? "Online" : "Offline"}
-                    </span>
+                    {isStatusPending ? (
+                      <span className="status-badge-inline loading">
+                        <span className="status-skeleton-pill" />
+                      </span>
+                    ) : (
+                      <span
+                        className={`status-badge-inline ${isOnline ? "online" : "offline"}`}
+                      >
+                        <span className="status-pulse" />
+                        {isOnline ? "Online" : "Offline"}
+                      </span>
+                    )}
                   </div>
 
                   <p className="address-inline">{shop.address}</p>
@@ -355,10 +388,13 @@ export function HomePage() {
                   )}
 
                   <button
-                    className="btn-primary btn-select-inline"
+                    className={`btn-primary btn-select-inline ${isStatusPending ? "loading" : ""}`}
                     type="button"
-                    disabled={!isOnline}
+                    disabled={isStatusPending || !isOnline}
                     onClick={() => {
+                      if (isStatusPending) {
+                        return;
+                      }
                       if (!isOnline) {
                         setError(
                           `${shop.name} is currently offline. Please choose an online shop.`,
@@ -368,7 +404,7 @@ export function HomePage() {
                       navigate(`/print?shopId=${encodeURIComponent(shop.id)}`);
                     }}
                   >
-                    {isOnline ? "Select" : "Offline"}
+                    {isStatusPending ? "Checking" : isOnline ? "Select" : "Offline"}
                   </button>
                 </article>
               );
@@ -384,7 +420,14 @@ export function HomePage() {
           </div>
           <div className="shops-list">
             {otherShops.map((shop) => {
-              const isOnline = shopOnlineMap[shop.id] ?? shop.isActive;
+              const hasRealtimeStatus = Object.prototype.hasOwnProperty.call(
+                shopOnlineMap,
+                shop.id,
+              );
+              const isStatusPending = shopStatusLoading && !hasRealtimeStatus;
+              const isOnline = hasRealtimeStatus
+                ? shopOnlineMap[shop.id]
+                : shop.isActive;
               return (
                 <article key={shop.id} className="shop-row animate-rise">
                   <div className="shop-name-status">
@@ -395,7 +438,7 @@ export function HomePage() {
 
                   <div className="shop-status-inline">
                     <span
-                      className={`status-dot-inline ${isOnline ? "online" : "offline"}`}
+                      className={`status-dot-inline ${isStatusPending ? "loading" : isOnline ? "online" : "offline"}`}
                     />
                   </div>
 
@@ -406,10 +449,13 @@ export function HomePage() {
                   )}
 
                   <button
-                    className="btn-primary btn-select-inline"
+                    className={`btn-primary btn-select-inline ${isStatusPending ? "loading" : ""}`}
                     type="button"
-                    disabled={!isOnline}
+                    disabled={isStatusPending || !isOnline}
                     onClick={() => {
+                      if (isStatusPending) {
+                        return;
+                      }
                       if (!isOnline) {
                         setError(
                           `${shop.name} is currently offline. Please choose an online shop.`,
@@ -419,7 +465,7 @@ export function HomePage() {
                       navigate(`/print?shopId=${encodeURIComponent(shop.id)}`);
                     }}
                   >
-                    Select
+                    {isStatusPending ? "Checking" : "Select"}
                   </button>
                 </article>
               );
