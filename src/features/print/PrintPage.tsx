@@ -303,6 +303,13 @@ function formatFileSize(bytes: number): string {
 
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
+function truncateFileName(fileName: string, maxLength = 15): string {
+  if (fileName.length <= maxLength) {
+    return fileName;
+  }
+
+  return `${fileName.slice(0, maxLength)}...`;
+}
 
 function getFileSignature(file: File): string {
   return `${file.name}::${file.size}::${file.lastModified}`;
@@ -2452,7 +2459,7 @@ export function PrintPage() {
                     <div className="file-icon">📄</div>
                     <h4>
                       {files.length === 1
-                        ? files[0].name
+                        ? truncateFileName(files[0].name)
                         : `${files.length} files selected`}
                     </h4>
                     <p className="file-size">
@@ -2463,7 +2470,7 @@ export function PrintPage() {
                     </p>
                     {files.length > 1 ? (
                       <p className="upload-subtitle">
-                        First file preview: {files[0].name}
+                        First file preview: {truncateFileName(files[0].name)}
                       </p>
                     ) : null}
                     <button
@@ -2547,7 +2554,7 @@ export function PrintPage() {
                                 onDragEnd={() => setDragIndex(null)}
                               >
                                 <span className="selected-file-name">
-                                  {index + 1}. {item.name}
+                                  {index + 1}. {truncateFileName(item.name)}
                                 </span>
                                 <span className="selected-file-meta">
                                   {formatFileSize(item.size)}
@@ -2689,7 +2696,7 @@ export function PrintPage() {
                               >
                                 <div className="upload-document-copy-label">
                                   <span>
-                                    {index + 1}. {item.name}
+                                    {index + 1}. {truncateFileName(item.name)}
                                   </span>
                                 </div>
                                 <div className="copy-input-spinner">
@@ -2867,7 +2874,7 @@ export function PrintPage() {
                           className={`print-preview-file-tab ${index === previewIndex ? "active" : ""}`}
                           onClick={() => setPreviewIndex(index)}
                         >
-                          {index + 1}. {item.name}
+                          {index + 1}. {truncateFileName(item.name)}
                         </button>
                       ))}
                     </div>
@@ -2972,7 +2979,7 @@ export function PrintPage() {
                                         setDraggingImageSignature("")
                                       }
                                     >
-                                      {entry.file.name}
+                                      {truncateFileName(entry.file.name)}
                                     </button>
                                   );
                                 })}
