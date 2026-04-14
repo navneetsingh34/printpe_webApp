@@ -39,6 +39,17 @@ vi.mock("../auth/auth-context", () => ({
   }),
 }));
 
+beforeAll(() => {
+  Object.defineProperty(window.URL, "createObjectURL", {
+    value: vi.fn(() => "blob:mock-url"),
+    writable: true,
+  });
+  Object.defineProperty(window.URL, "revokeObjectURL", {
+    value: vi.fn(),
+    writable: true,
+  });
+});
+
 describe("PrintPage", () => {
   it("blocks unsupported file types before upload API call", async () => {
     mocked.getAllShops.mockResolvedValue([
@@ -85,9 +96,70 @@ describe("PrintPage", () => {
     const badFile = new File(["x"], "notes.txt", { type: "text/plain" });
     fireEvent.change(fileInput, { target: { files: [badFile] } });
 
-    await screen.findByText("Only PDF, DOC, DOCX, JPG, and PNG files are supported.");
+    await screen.findByText("Only PDF, JPG, and PNG files are supported.");
     await waitFor(() => {
       expect(mocked.uploadDocument).not.toHaveBeenCalled();
     });
+  });
+
+  it("defaults multiple uploaded images to separate pages", async () => {
+    mocked.getAllShops.mockResolvedValue([
+      {
+        id: "shop-1",
+        name: "Campus Print",
+        address: "Main Road",
+        latitude: 0,
+        longitude: 0,
+        phone: "123",
+        email: "a@b.com",
+        openingTime: "09:00",
+        closingTime: "18:00",
+        isActive: true,
+      },
+    ]);
+    mocked.getShopPricing.mockResolvedValue({
+      paperPricing: [
+        {
+          paperSize: "A4",
+          enabled: true,
+          bw: { firstNPages: 20, firstNRate: 0.5, afterNRate: 0.5 },
+          color: { firstNPages: 20, firstNRate: 1, afterNRate: 1 },
+          doubleSidedDiscountPercent: 0,
+        },
+      ],
+      bindings: [{ id: "none", label: "None", price: 0, enabled: true }],
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <PrintPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Start Upload",
+      }),
+    );
+
+    const fileInput = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    const firstPhoto = new File(["first"], "first.png", { type: "image/png" });
+    const secondPhoto = new File(["second"], "second.png", {
+      type: "image/png",
+    });
+    fireEvent.change(fileInput, {
+      target: { files: [firstPhoto, secondPhoto] },
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Continue to Configure",
+      }),
+    );
+
+    await screen.findByRole("heading", { name: "Page 1" });
+    await screen.findByRole("heading", { name: "Page 2" });
   });
 });

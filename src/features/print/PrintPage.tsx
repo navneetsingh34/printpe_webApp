@@ -217,7 +217,10 @@ function normalizePricing(
             price: Number(item.price ?? 0) || 0,
             enabled: item.enabled !== false,
           }))
-          .filter((item) => item.id !== "staple" && item.label.toLowerCase() !== "staple")
+          .filter(
+            (item) =>
+              item.id !== "staple" && item.label.toLowerCase() !== "staple",
+          )
       : defaults.bindings;
 
   if (!bindings.some((item) => item.id === "none")) {
@@ -228,11 +231,7 @@ function normalizePricing(
 }
 
 function validateFile(file: File): string | null {
-  const allowedDocMimeTypes = [
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-  ];
+  const allowedDocMimeTypes = ["application/pdf", "image/jpeg", "image/png"];
   const allowedDocExtensions = new Set(["pdf"]);
   const blockedWordMimeTypes = new Set([
     "application/msword",
@@ -255,14 +254,21 @@ function validateFile(file: File): string | null {
   ]);
   const maxBytes = 50 * 1024 * 1024;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (blockedWordMimeTypes.has(file.type) || blockedWordExtensions.has(extension)) {
+  if (
+    blockedWordMimeTypes.has(file.type) ||
+    blockedWordExtensions.has(extension)
+  ) {
     return DOC_UNSUPPORTED_MESSAGE;
   }
   const isAllowedMimeType = allowedDocMimeTypes.includes(file.type);
   const isAllowedDocExtension = allowedDocExtensions.has(extension);
   const isAllowedImageExtension = allowedImageExtensions.has(extension);
 
-  if (!isAllowedMimeType && !isAllowedDocExtension && !isAllowedImageExtension) {
+  if (
+    !isAllowedMimeType &&
+    !isAllowedDocExtension &&
+    !isAllowedImageExtension
+  ) {
     return "Only PDF, JPG, and PNG files are supported.";
   }
 
@@ -340,10 +346,17 @@ function getConfiguredPageCount(
   }
 
   if (Number.isFinite(groupedImagePages)) {
-    return Math.max(1, nonImagePages + Math.max(0, Math.floor(groupedImagePages || 0)));
+    return Math.max(
+      1,
+      nonImagePages + Math.max(0, Math.floor(groupedImagePages || 0)),
+    );
   }
 
   return Math.max(1, nonImagePages + imagePages.size);
+}
+
+function getDefaultImagePageNumber(order: number): number {
+  return Math.max(1, Math.floor(order) + 1);
 }
 
 function isPrinterOperational(status: unknown): boolean {
@@ -393,9 +406,9 @@ type RealtimePrinterSnapshotPayload = {
   runtimeOnline?: boolean;
 };
 
-async function getRealtimeShopPrinters(shopId: string): Promise<
-  RealtimePrinterSnapshotPayload["printers"]
-> {
+async function getRealtimeShopPrinters(
+  shopId: string,
+): Promise<RealtimePrinterSnapshotPayload["printers"]> {
   const bundle = await getTokenBundle();
   if (!bundle?.accessToken) {
     throw new Error("Please sign in again to check realtime printer status.");
@@ -445,9 +458,7 @@ async function getRealtimeShopPrinters(shopId: string): Promise<
 
     const onSocketError = (payload?: { message?: string }) => {
       cleanup();
-      reject(
-        new Error(payload?.message ?? "Realtime printer check failed."),
-      );
+      reject(new Error(payload?.message ?? "Realtime printer check failed."));
     };
 
     socket.on("connect", onConnect);
@@ -465,9 +476,7 @@ function supportsRequestedPaperSize(
     return true;
   }
 
-  const normalizedSelected = String(selectedPaperSize)
-    .trim()
-    .toUpperCase();
+  const normalizedSelected = String(selectedPaperSize).trim().toUpperCase();
 
   return availablePaperSizes.some(
     (size) => String(size).trim().toUpperCase() === normalizedSelected,
@@ -570,7 +579,10 @@ function getRotatedResizeCursor(
     "nw",
   ];
 
-  const cursorByDirection: Record<typeof ring[number], React.CSSProperties["cursor"]> = {
+  const cursorByDirection: Record<
+    (typeof ring)[number],
+    React.CSSProperties["cursor"]
+  > = {
     n: "ns-resize",
     ne: "nesw-resize",
     e: "ew-resize",
@@ -583,7 +595,8 @@ function getRotatedResizeCursor(
 
   const baseIndex = ring.indexOf(handle);
   const rotateSteps = Math.round(rotationDeg / 45);
-  const rotatedIndex = ((baseIndex + rotateSteps) % ring.length + ring.length) % ring.length;
+  const rotatedIndex =
+    (((baseIndex + rotateSteps) % ring.length) + ring.length) % ring.length;
   return cursorByDirection[ring[rotatedIndex]];
 }
 
@@ -614,12 +627,7 @@ function getDefaultImageTransform(
   const safeImage =
     Number.isFinite(imageRatio) && imageRatio > 0 ? imageRatio : 1;
 
-  const base =
-    fitMode === "actual"
-      ? 52
-      : fitMode === "fill"
-        ? 92
-        : 84;
+  const base = fitMode === "actual" ? 52 : fitMode === "fill" ? 92 : 84;
 
   let widthPct = base;
   let heightPct = base;
@@ -655,8 +663,10 @@ function getCompositeDefaultImageTransform(
 
   const cellWidth = 100 / columns;
   const cellHeight = 100 / rows;
-  const safeSheet = Number.isFinite(sheetRatio) && sheetRatio > 0 ? sheetRatio : 0.707;
-  const safeImage = Number.isFinite(imageRatio) && imageRatio > 0 ? imageRatio : 1;
+  const safeSheet =
+    Number.isFinite(sheetRatio) && sheetRatio > 0 ? sheetRatio : 0.707;
+  const safeImage =
+    Number.isFinite(imageRatio) && imageRatio > 0 ? imageRatio : 1;
 
   const baseWidth = Math.max(24, cellWidth * 0.84);
   const heightFromWidth = baseWidth * (safeSheet / safeImage);
@@ -685,8 +695,12 @@ export function PrintPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [filePages, setFilePages] = useState(1);
   const [copies, setCopies] = useState(1);
-  const [documentCopiesByFile, setDocumentCopiesByFile] = useState<Record<string, number>>({});
-  const [imageCopiesByPage, setImageCopiesByPage] = useState<Record<number, number>>({});
+  const [documentCopiesByFile, setDocumentCopiesByFile] = useState<
+    Record<string, number>
+  >({});
+  const [imageCopiesByPage, setImageCopiesByPage] = useState<
+    Record<number, number>
+  >({});
   const [color, setColor] = useState(false);
   const [doubleSided, setDoubleSided] = useState(false);
   const [paperSize, setPaperSize] = useState("A4");
@@ -715,9 +729,9 @@ export function PrintPage() {
   const [previewSettingsByFile, setPreviewSettingsByFile] = useState<
     Record<string, FilePreviewSettings>
   >({});
-  const [imagePageByFile, setImagePageByFile] = useState<Record<string, number>>(
-    {},
-  );
+  const [imagePageByFile, setImagePageByFile] = useState<
+    Record<string, number>
+  >({});
   const [selectedPreviewPage, setSelectedPreviewPage] = useState<number | null>(
     null,
   );
@@ -752,16 +766,14 @@ export function PrintPage() {
 
   const isImagePreview = Boolean(
     activePreviewFile &&
-      (activePreviewFile.type.startsWith("image/") ||
-        /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif)$/i.test(
-          previewFileName,
-        )),
+    (activePreviewFile.type.startsWith("image/") ||
+      /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif)$/i.test(previewFileName)),
   );
 
   const isPdfPreview = Boolean(
     activePreviewFile &&
-      (activePreviewFile.type === "application/pdf" ||
-        /\.pdf$/i.test(previewFileName)),
+    (activePreviewFile.type === "application/pdf" ||
+      /\.pdf$/i.test(previewFileName)),
   );
 
   const previewSheetAspectRatio =
@@ -799,11 +811,11 @@ export function PrintPage() {
               rotationDeg: previewRotation,
               zoomPct: previewZoom,
             }
-          : previewSettingsByFile[signature] ?? {
+          : (previewSettingsByFile[signature] ?? {
               transform: fallbackTransform,
               rotationDeg: 0,
               zoomPct: 100,
-            };
+            });
 
         return {
           file,
@@ -837,8 +849,11 @@ export function PrintPage() {
     const grouped = new Map<number, string[]>();
     imagePreviewFiles.forEach(({ file }, order) => {
       const signature = getFileSignature(file);
-      const fallbackPage = Math.floor(order / 2) + 1;
-      const pageNumber = Math.max(1, imagePageByFile[signature] ?? fallbackPage);
+      const fallbackPage = getDefaultImagePageNumber(order);
+      const pageNumber = Math.max(
+        1,
+        imagePageByFile[signature] ?? fallbackPage,
+      );
       const list = grouped.get(pageNumber) ?? [];
       list.push(signature);
       grouped.set(pageNumber, list);
@@ -873,8 +888,9 @@ export function PrintPage() {
     }
 
     return (
-      imagePageBuckets.find((bucket) => bucket.pageNumber === selectedPreviewPage) ??
-      imagePageBuckets[0]
+      imagePageBuckets.find(
+        (bucket) => bucket.pageNumber === selectedPreviewPage,
+      ) ?? imagePageBuckets[0]
     );
   }, [imagePageBuckets, selectedPreviewPage]);
 
@@ -976,8 +992,10 @@ export function PrintPage() {
     if (!isImagePreview || !previewSheetRef.current) return;
 
     const rect = previewSheetRef.current.getBoundingClientRect();
-    const centerX = rect.left + (previewTransform.centerXPct / 100) * rect.width;
-    const centerY = rect.top + (previewTransform.centerYPct / 100) * rect.height;
+    const centerX =
+      rect.left + (previewTransform.centerXPct / 100) * rect.width;
+    const centerY =
+      rect.top + (previewTransform.centerYPct / 100) * rect.height;
     const startPointerAngle =
       (Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180) /
       Math.PI;
@@ -1110,7 +1128,7 @@ export function PrintPage() {
       const next: Record<string, number> = {};
       imagePreviewFiles.forEach(({ file }, order) => {
         const signature = getFileSignature(file);
-        const fallbackPage = Math.floor(order / 2) + 1;
+        const fallbackPage = getDefaultImagePageNumber(order);
         next[signature] = Math.max(1, prev[signature] ?? fallbackPage);
       });
 
@@ -1155,7 +1173,10 @@ export function PrintPage() {
         }
 
         const signature = getFileSignature(file);
-        next[signature] = normalizeCopiesValue(prev[signature] ?? copies, copies);
+        next[signature] = normalizeCopiesValue(
+          prev[signature] ?? copies,
+          copies,
+        );
       }
 
       const prevKeys = Object.keys(prev);
@@ -1176,7 +1197,10 @@ export function PrintPage() {
       const next: Record<number, number> = {};
 
       for (const bucket of imagePageBuckets) {
-        next[bucket.pageNumber] = normalizeCopiesValue(prev[bucket.pageNumber] ?? copies, copies);
+        next[bucket.pageNumber] = normalizeCopiesValue(
+          prev[bucket.pageNumber] ?? copies,
+          copies,
+        );
       }
 
       const prevKeys = Object.keys(prev);
@@ -1312,12 +1336,11 @@ export function PrintPage() {
         const centerY =
           rect.top + (dragState.startTransform.centerYPct / 100) * rect.height;
         const pointerAngle =
-          (Math.atan2(event.clientY - centerY, event.clientX - centerX) *
-            180) /
+          (Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180) /
           Math.PI;
         const delta = pointerAngle - dragState.startPointerAngle;
         setPreviewRotation(
-          ((((dragState.startRotation + delta) % 360) + 360) % 360),
+          (((dragState.startRotation + delta) % 360) + 360) % 360,
         );
         return;
       }
@@ -1410,8 +1433,16 @@ export function PrintPage() {
         dragState.startRotation,
       );
 
-      nextCenterX = clampNumber(nextCenterX, projected.halfX, 100 - projected.halfX);
-      nextCenterY = clampNumber(nextCenterY, projected.halfY, 100 - projected.halfY);
+      nextCenterX = clampNumber(
+        nextCenterX,
+        projected.halfX,
+        100 - projected.halfX,
+      );
+      nextCenterY = clampNumber(
+        nextCenterY,
+        projected.halfY,
+        100 - projected.halfY,
+      );
 
       setPreviewTransform({
         centerXPct: nextCenterX,
@@ -1594,7 +1625,9 @@ export function PrintPage() {
     [pricing],
   );
   const bindingOptions = useMemo(
-    () => pricing?.bindings?.filter((item) => item.enabled && item.id !== "none") ?? [],
+    () =>
+      pricing?.bindings?.filter((item) => item.enabled && item.id !== "none") ??
+      [],
     [pricing],
   );
 
@@ -1624,15 +1657,27 @@ export function PrintPage() {
       if (isImageFile(file)) {
         const signature = getFileSignature(file);
         const fallbackPage = Math.floor(index / 2) + 1;
-        const pageNumber = Math.max(1, Number(imagePageByFile[signature] ?? fallbackPage) || 1);
+        const pageNumber = Math.max(
+          1,
+          Number(imagePageByFile[signature] ?? fallbackPage) || 1,
+        );
         const currentCopies = imageSheetCopiesByPage.get(pageNumber) ?? 0;
-        const nextCopies = normalizeCopiesValue(imageCopiesByPage[pageNumber] ?? copies, copies);
-        imageSheetCopiesByPage.set(pageNumber, Math.max(currentCopies, nextCopies));
+        const nextCopies = normalizeCopiesValue(
+          imageCopiesByPage[pageNumber] ?? copies,
+          copies,
+        );
+        imageSheetCopiesByPage.set(
+          pageNumber,
+          Math.max(currentCopies, nextCopies),
+        );
         return;
       }
 
       const signature = getFileSignature(file);
-      const docCopies = normalizeCopiesValue(documentCopiesByFile[signature] ?? copies, copies);
+      const docCopies = normalizeCopiesValue(
+        documentCopiesByFile[signature] ?? copies,
+        copies,
+      );
       totalSheets += docCopies;
     });
 
@@ -1663,7 +1708,17 @@ export function PrintPage() {
       totalSheets,
       bindingLabel: selectedBinding?.label ?? "None",
     };
-  }, [color, copies, documentCopiesByFile, doubleSided, files, imageCopiesByPage, imagePageByFile, selectedBinding, selectedPaper]);
+  }, [
+    color,
+    copies,
+    documentCopiesByFile,
+    doubleSided,
+    files,
+    imageCopiesByPage,
+    imagePageByFile,
+    selectedBinding,
+    selectedPaper,
+  ]);
 
   const onPickFiles = async (nextFiles: File[]) => {
     setError("");
@@ -1748,7 +1803,9 @@ export function PrintPage() {
 
     const selectedShopIsOnline = shopOnlineMap[shopId] ?? selectedShop.isActive;
     if (!selectedShopIsOnline) {
-      setError("Selected shop is currently offline. Please choose an online shop.");
+      setError(
+        "Selected shop is currently offline. Please choose an online shop.",
+      );
       return;
     }
 
@@ -1769,22 +1826,26 @@ export function PrintPage() {
         let hasMatchingOnlinePrinter = color
           ? realtimeOnlinePrinters.some(
               (printer) =>
-                (printer as { supportsColor?: boolean }).supportsColor !== false,
+                (printer as { supportsColor?: boolean }).supportsColor !==
+                false,
             )
           : realtimeOnlinePrinters.length > 0;
 
         // Guard against transient stale realtime snapshots by validating once via REST.
         if (!hasMatchingOnlinePrinter) {
           const apiPrinters = await getShopPrinters(shopId);
-          const apiOnlinePrinters = (apiPrinters as Array<{
-            status?: unknown;
-            supportsColor?: boolean;
-          }>).filter((printer) => isPrinterOperational(printer.status));
+          const apiOnlinePrinters = (
+            apiPrinters as Array<{
+              status?: unknown;
+              supportsColor?: boolean;
+            }>
+          ).filter((printer) => isPrinterOperational(printer.status));
 
           hasMatchingOnlinePrinter = color
             ? apiOnlinePrinters.some(
                 (printer) =>
-                  (printer as { supportsColor?: boolean }).supportsColor !== false,
+                  (printer as { supportsColor?: boolean }).supportsColor !==
+                  false,
               )
             : apiOnlinePrinters.length > 0;
         }
@@ -1800,31 +1861,36 @@ export function PrintPage() {
         }
       } catch {
         const apiPrinters = await getShopPrinters(shopId);
-        const apiOnlinePrinters = (apiPrinters as Array<{
-          status?: unknown;
-          supportsColor?: boolean;
-        }>).filter((printer) => isPrinterOperational(printer.status));
+        const apiOnlinePrinters = (
+          apiPrinters as Array<{
+            status?: unknown;
+            supportsColor?: boolean;
+          }>
+        ).filter((printer) => isPrinterOperational(printer.status));
 
         const hasMatchingOnlinePrinter = color
           ? apiOnlinePrinters.some(
               (printer) =>
-                (printer as { supportsColor?: boolean }).supportsColor !== false,
+                (printer as { supportsColor?: boolean }).supportsColor !==
+                false,
             )
           : apiOnlinePrinters.length > 0;
 
-      if (!hasMatchingOnlinePrinter) {
-        setStatus("");
-        setError(
-          color
-            ? "No online color printer is available on desktop for this shop."
-            : "No online printer is available on desktop for this shop.",
-        );
-        return;
-      }
+        if (!hasMatchingOnlinePrinter) {
+          setStatus("");
+          setError(
+            color
+              ? "No online color printer is available on desktop for this shop."
+              : "No online printer is available on desktop for this shop.",
+          );
+          return;
+        }
       }
     } catch {
       setStatus("");
-      setError("Unable to verify desktop printer status right now. Please try again.");
+      setError(
+        "Unable to verify desktop printer status right now. Please try again.",
+      );
       return;
     }
 
@@ -1920,13 +1986,16 @@ export function PrintPage() {
     const hasEligiblePrinterForSelection = onlinePrinters.some((printer) => {
       if (color && printer.supportsColor === false) return false;
       if (doubleSided && printer.supportsDoubleSided === false) return false;
-      if (!supportsRequestedPaperSize(printer.paperSizes, paperSize)) return false;
+      if (!supportsRequestedPaperSize(printer.paperSizes, paperSize))
+        return false;
       return true;
     });
 
     const bindingRequiresManual = binding !== "none";
     const manualWork =
-      bindingRequiresManual || !hasOnlinePrinter || !hasEligiblePrinterForSelection;
+      bindingRequiresManual ||
+      !hasOnlinePrinter ||
+      !hasEligiblePrinterForSelection;
 
     if (manualWork) {
       setStatus(
@@ -2014,7 +2083,9 @@ export function PrintPage() {
           const previewSettings = previewSettingsByFile[signature];
           const assignedPage = Math.max(
             1,
-            bucketPageBySignature.get(signature) ?? imagePageByFile[signature] ?? 1,
+            bucketPageBySignature.get(signature) ??
+              imagePageByFile[signature] ??
+              1,
           );
           const imageOrder = imageOrderBySignature.get(signature) ?? 0;
           const imageAspect = previewImageAspectByFile[signature] ?? 1;
@@ -2024,25 +2095,24 @@ export function PrintPage() {
             imageOrder,
             imageFilesWithOrder.length,
           );
-          const previewTransformForPrint =
-            isImageFile(currentFile)
-              ? {
-                  centerXPct:
-                    previewSettings?.transform.centerXPct ??
-                    fallbackTransform.centerXPct,
-                  centerYPct:
-                    previewSettings?.transform.centerYPct ??
-                    fallbackTransform.centerYPct,
-                  widthPct:
-                    previewSettings?.transform.widthPct ??
-                    fallbackTransform.widthPct,
-                  heightPct:
-                    previewSettings?.transform.heightPct ??
-                    fallbackTransform.heightPct,
-                  rotationDeg: previewSettings?.rotationDeg ?? 0,
-                  zoomPct: previewSettings?.zoomPct ?? 100,
-                }
-              : undefined;
+          const previewTransformForPrint = isImageFile(currentFile)
+            ? {
+                centerXPct:
+                  previewSettings?.transform.centerXPct ??
+                  fallbackTransform.centerXPct,
+                centerYPct:
+                  previewSettings?.transform.centerYPct ??
+                  fallbackTransform.centerYPct,
+                widthPct:
+                  previewSettings?.transform.widthPct ??
+                  fallbackTransform.widthPct,
+                heightPct:
+                  previewSettings?.transform.heightPct ??
+                  fallbackTransform.heightPct,
+                rotationDeg: previewSettings?.rotationDeg ?? 0,
+                zoomPct: previewSettings?.zoomPct ?? 100,
+              }
+            : undefined;
 
           uploadedFiles.push({
             id: uploaded.id,
@@ -2090,13 +2160,18 @@ export function PrintPage() {
           paperSize,
           binding: binding || undefined,
           documentQueue: uploadedFiles.map((item) => {
-            const isImage = Boolean(item.assignedPage)
+            const isImage = Boolean(item.assignedPage);
             const effectiveCopies = isImage
               ? normalizeCopiesValue(
-                  imageCopiesByPage[Math.max(1, Math.floor(Number(item.assignedPage) || 1))] ?? copies,
+                  imageCopiesByPage[
+                    Math.max(1, Math.floor(Number(item.assignedPage) || 1))
+                  ] ?? copies,
                   copies,
                 )
-              : normalizeCopiesValue(documentCopiesByFile[item.signature] ?? copies, copies)
+              : normalizeCopiesValue(
+                  documentCopiesByFile[item.signature] ?? copies,
+                  copies,
+                );
 
             return {
               fileId: item.id,
@@ -2105,7 +2180,7 @@ export function PrintPage() {
               copies: effectiveCopies,
               previewTransform: item.previewTransform,
               assignedPage: item.assignedPage,
-            }
+            };
           }),
         },
       });
@@ -2597,70 +2672,85 @@ export function PrintPage() {
                     )
                   </p>
                   <div className="upload-documents-copy-list">
-                    {files.filter((item) => !isImageFile(item)).length > 0 ? (
-                      files
-                        .filter((item) => !isImageFile(item))
-                        .map((item, index) => {
-                          const signature = getFileSignature(item)
-                          const itemCopies = normalizeCopiesValue(documentCopiesByFile[signature] ?? copies, copies)
+                    {files.filter((item) => !isImageFile(item)).length > 0
+                      ? files
+                          .filter((item) => !isImageFile(item))
+                          .map((item, index) => {
+                            const signature = getFileSignature(item);
+                            const itemCopies = normalizeCopiesValue(
+                              documentCopiesByFile[signature] ?? copies,
+                              copies,
+                            );
 
-                          return (
-                            <div key={`${item.name}-${item.size}-${index}`} className="upload-document-copy-row">
-                              <div className="upload-document-copy-label">
-                                <span>{index + 1}. {item.name}</span>
+                            return (
+                              <div
+                                key={`${item.name}-${item.size}-${index}`}
+                                className="upload-document-copy-row"
+                              >
+                                <div className="upload-document-copy-label">
+                                  <span>
+                                    {index + 1}. {item.name}
+                                  </span>
+                                </div>
+                                <div className="copy-input-spinner">
+                                  <button
+                                    type="button"
+                                    className="spinner-btn spinner-down"
+                                    onClick={() =>
+                                      setDocumentCopiesByFile((prev) => ({
+                                        ...prev,
+                                        [signature]: Math.max(
+                                          1,
+                                          itemCopies - 1,
+                                        ),
+                                      }))
+                                    }
+                                    title="Decrease"
+                                    aria-label={`Decrease copies for ${item.name}`}
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    inputMode="numeric"
+                                    value={itemCopies}
+                                    onChange={(event) =>
+                                      setDocumentCopiesByFile((prev) => ({
+                                        ...prev,
+                                        [signature]: normalizeCopiesValue(
+                                          event.target.value,
+                                          itemCopies,
+                                        ),
+                                      }))
+                                    }
+                                    className="upload-document-copy-input"
+                                    aria-label={`Copies for ${item.name}`}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="spinner-btn spinner-up"
+                                    onClick={() =>
+                                      setDocumentCopiesByFile((prev) => ({
+                                        ...prev,
+                                        [signature]: itemCopies + 1,
+                                      }))
+                                    }
+                                    title="Increase"
+                                    aria-label={`Increase copies for ${item.name}`}
+                                  >
+                                    +
+                                  </button>
+                                </div>
                               </div>
-                              <div className="copy-input-spinner">
-                                <button
-                                  type="button"
-                                  className="spinner-btn spinner-down"
-                                  onClick={() =>
-                                    setDocumentCopiesByFile((prev) => ({
-                                      ...prev,
-                                      [signature]: Math.max(1, itemCopies - 1),
-                                    }))
-                                  }
-                                  title="Decrease"
-                                  aria-label={`Decrease copies for ${item.name}`}
-                                >
-                                  −
-                                </button>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  inputMode="numeric"
-                                  value={itemCopies}
-                                  onChange={(event) =>
-                                    setDocumentCopiesByFile((prev) => ({
-                                      ...prev,
-                                      [signature]: normalizeCopiesValue(event.target.value, itemCopies),
-                                    }))
-                                  }
-                                  className="upload-document-copy-input"
-                                  aria-label={`Copies for ${item.name}`}
-                                />
-                                <button
-                                  type="button"
-                                  className="spinner-btn spinner-up"
-                                  onClick={() =>
-                                    setDocumentCopiesByFile((prev) => ({
-                                      ...prev,
-                                      [signature]: itemCopies + 1,
-                                    }))
-                                  }
-                                  title="Increase"
-                                  aria-label={`Increase copies for ${item.name}`}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })
-                    ) : null}
+                            );
+                          })
+                      : null}
                   </div>
                   {files.some((item) => isImageFile(item)) ? (
                     <p className="upload-files-summary-note">
-                      Image page copies are set in the Page Assignment panel below.
+                      Image page copies are set in the Page Assignment panel
+                      below.
                     </p>
                   ) : null}
                 </article>
@@ -2670,41 +2760,8 @@ export function PrintPage() {
               <div className="print-options-section animate-rise delay-2">
                 <h3 className="section-title">Print Settings</h3>
 
-                {/* Copies and Paper Size Row */}
+                {/* Paper Size and Binding Row */}
                 <div className="options-row">
-                  <div className="option-card">
-                    <label className="option-label">📄 Copies</label>
-                    <div className="number-input-group number-input-group-prominent">
-                      <button
-                        type="button"
-                        onClick={() => setCopies(Math.max(1, copies - 1))}
-                        className="number-btn"
-                        aria-label="Decrease total copies"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        inputMode="numeric"
-                        value={copies}
-                        onChange={(e) =>
-                          setCopies(Math.max(1, Number(e.target.value) || 1))
-                        }
-                        className="number-display"
-                        aria-label="Total copies"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCopies(copies + 1)}
-                        className="number-btn"
-                        aria-label="Increase total copies"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="option-card">
                     <label className="option-label">📏 Paper Size</label>
                     <div className="option-select-shell">
@@ -2784,76 +2841,6 @@ export function PrintPage() {
                       </div>
                     </div>
                   </label>
-
-                  <label className="toggle-card">
-                    <input
-                      type="checkbox"
-                      checked={doubleSided}
-                      onChange={(e) => setDoubleSided(e.target.checked)}
-                      className="toggle-input"
-                    />
-                    <div className="toggle-content">
-                      <span className="toggle-check" aria-hidden="true" />
-                      <span
-                        className="toggle-icon toggle-icon-svg"
-                        aria-hidden="true"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <rect
-                            x="5"
-                            y="3"
-                            width="11"
-                            height="14"
-                            rx="2"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                          />
-                          <path
-                            d="M10 7H13.5"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                          <path
-                            d="M10 10H14"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                          <rect
-                            x="8"
-                            y="7"
-                            width="11"
-                            height="14"
-                            rx="2"
-                            fill="white"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                          />
-                          <path
-                            d="M13 11H16.5"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                          <path
-                            d="M13 14H17"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </span>
-                      <div className="toggle-text">
-                        <h4>Double Sided</h4>
-                        <p>Print on both sides</p>
-                      </div>
-                    </div>
-                  </label>
                 </div>
 
                 <article className="print-preview-card" aria-live="polite">
@@ -2866,7 +2853,11 @@ export function PrintPage() {
                   </div>
 
                   {files.length > 1 ? (
-                    <div className="print-preview-file-tabs" role="tablist" aria-label="Preview file selector">
+                    <div
+                      className="print-preview-file-tabs"
+                      role="tablist"
+                      aria-label="Preview file selector"
+                    >
                       {files.map((item, index) => (
                         <button
                           key={`${item.name}-${item.size}-${index}-preview`}
@@ -2925,7 +2916,10 @@ export function PrintPage() {
                                 event.dataTransfer.getData("text/plain") ||
                                 draggingImageSignature;
                               if (!droppedSignature) return;
-                              assignImageToPage(droppedSignature, bucket.pageNumber);
+                              assignImageToPage(
+                                droppedSignature,
+                                bucket.pageNumber,
+                              );
                               setSelectedPreviewPage(bucket.pageNumber);
                               setDraggingImageSignature("");
                             }}
@@ -2960,15 +2954,23 @@ export function PrintPage() {
                                       draggable
                                       className="print-page-group-chip"
                                       onClick={() => {
-                                        setSelectedPreviewPage(bucket.pageNumber);
+                                        setSelectedPreviewPage(
+                                          bucket.pageNumber,
+                                        );
                                         setPreviewIndex(entry.fileIndex);
                                       }}
                                       onDragStart={(event) => {
-                                        event.dataTransfer.setData("text/plain", signature);
-                                        event.dataTransfer.effectAllowed = "move";
+                                        event.dataTransfer.setData(
+                                          "text/plain",
+                                          signature,
+                                        );
+                                        event.dataTransfer.effectAllowed =
+                                          "move";
                                         setDraggingImageSignature(signature);
                                       }}
-                                      onDragEnd={() => setDraggingImageSignature("")}
+                                      onDragEnd={() =>
+                                        setDraggingImageSignature("")
+                                      }
                                     >
                                       {entry.file.name}
                                     </button>
@@ -2982,7 +2984,9 @@ export function PrintPage() {
                             )}
 
                             <div className="print-page-group-footer">
-                              <span className="print-page-group-copy-label">Copies</span>
+                              <span className="print-page-group-copy-label">
+                                Copies
+                              </span>
                               <div className="copy-input-spinner">
                                 <button
                                   type="button"
@@ -2990,7 +2994,10 @@ export function PrintPage() {
                                   onClick={() =>
                                     setImageCopiesByPage((prev) => ({
                                       ...prev,
-                                      [bucket.pageNumber]: Math.max(1, (prev[bucket.pageNumber] ?? copies) - 1),
+                                      [bucket.pageNumber]: Math.max(
+                                        1,
+                                        (prev[bucket.pageNumber] ?? copies) - 1,
+                                      ),
                                     }))
                                   }
                                   title="Decrease"
@@ -3002,11 +3009,18 @@ export function PrintPage() {
                                   type="number"
                                   min={1}
                                   inputMode="numeric"
-                                  value={normalizeCopiesValue(imageCopiesByPage[bucket.pageNumber] ?? copies, copies)}
+                                  value={normalizeCopiesValue(
+                                    imageCopiesByPage[bucket.pageNumber] ??
+                                      copies,
+                                    copies,
+                                  )}
                                   onChange={(event) =>
                                     setImageCopiesByPage((prev) => ({
                                       ...prev,
-                                      [bucket.pageNumber]: normalizeCopiesValue(event.target.value, copies),
+                                      [bucket.pageNumber]: normalizeCopiesValue(
+                                        event.target.value,
+                                        copies,
+                                      ),
                                     }))
                                   }
                                   className="print-page-group-copy-input"
@@ -3018,7 +3032,11 @@ export function PrintPage() {
                                   onClick={() =>
                                     setImageCopiesByPage((prev) => ({
                                       ...prev,
-                                      [bucket.pageNumber]: normalizeCopiesValue(prev[bucket.pageNumber] ?? copies, copies) + 1,
+                                      [bucket.pageNumber]:
+                                        normalizeCopiesValue(
+                                          prev[bucket.pageNumber] ?? copies,
+                                          copies,
+                                        ) + 1,
                                     }))
                                   }
                                   title="Increase"
@@ -3072,8 +3090,7 @@ export function PrintPage() {
                           type="button"
                           onClick={() =>
                             setPreviewRotation(
-                              (current) =>
-                                ((((current - 90) % 360) + 360) % 360),
+                              (current) => (((current - 90) % 360) + 360) % 360,
                             )
                           }
                         >
@@ -3091,7 +3108,6 @@ export function PrintPage() {
                         </button>
                       </div>
                     </div>
-
                   </div>
 
                   <div className="print-preview-stage-wrap">
@@ -3109,7 +3125,8 @@ export function PrintPage() {
                         } as React.CSSProperties
                       }
                     >
-                      {isImagePreview && filteredImagePreviewLayerList.length > 0 ? (
+                      {isImagePreview &&
+                      filteredImagePreviewLayerList.length > 0 ? (
                         filteredImagePreviewLayerList.map((layer) => {
                           const layerWidth = clampNumber(
                             layer.settings.transform.widthPct,
@@ -3146,28 +3163,141 @@ export function PrintPage() {
                                 onPreviewFramePointerDown(event);
                               }}
                             >
-                              <img
-                                src={layer.url}
-                                alt={layer.file.name || "Print preview"}
-                                className="print-preview-image-content"
-                                style={{
-                                  objectFit: "fill",
-                                  transform: `scale(${layer.settings.zoomPct / 100})`,
-                                  transformOrigin: "center",
-                                }}
-                              />
+                              <div className="print-preview-image-viewport">
+                                <img
+                                  src={layer.url}
+                                  alt={layer.file.name || "Print preview"}
+                                  className="print-preview-image-content"
+                                  style={{
+                                    objectFit: "fill",
+                                    transform: `scale(${layer.settings.zoomPct / 100})`,
+                                    transformOrigin: "center",
+                                  }}
+                                />
+                              </div>
 
                               {layer.isActive && isPreviewSelected ? (
                                 <>
-                                  <button type="button" className="preview-handle preview-handle-nw" style={{ cursor: getRotatedResizeCursor("nw", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("nw", e)} aria-label="Resize from top-left" />
-                                  <button type="button" className="preview-handle preview-handle-ne" style={{ cursor: getRotatedResizeCursor("ne", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("ne", e)} aria-label="Resize from top-right" />
-                                  <button type="button" className="preview-handle preview-handle-sw" style={{ cursor: getRotatedResizeCursor("sw", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("sw", e)} aria-label="Resize from bottom-left" />
-                                  <button type="button" className="preview-handle preview-handle-se" style={{ cursor: getRotatedResizeCursor("se", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("se", e)} aria-label="Resize from bottom-right" />
-                                  <button type="button" className="preview-handle preview-handle-n" style={{ cursor: getRotatedResizeCursor("n", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("n", e)} aria-label="Resize from top" />
-                                  <button type="button" className="preview-handle preview-handle-s" style={{ cursor: getRotatedResizeCursor("s", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("s", e)} aria-label="Resize from bottom" />
-                                  <button type="button" className="preview-handle preview-handle-e" style={{ cursor: getRotatedResizeCursor("e", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("e", e)} aria-label="Resize from right" />
-                                  <button type="button" className="preview-handle preview-handle-w" style={{ cursor: getRotatedResizeCursor("w", previewRotation) }} onPointerDown={(e) => beginPreviewInteraction("w", e)} aria-label="Resize from left" />
-                                  <button type="button" className="preview-rotate-handle" onPointerDown={(e) => beginPreviewInteraction("rotate", e)} aria-label="Rotate image" />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-nw"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "nw",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("nw", e)
+                                    }
+                                    aria-label="Resize from top-left"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-ne"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "ne",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("ne", e)
+                                    }
+                                    aria-label="Resize from top-right"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-sw"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "sw",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("sw", e)
+                                    }
+                                    aria-label="Resize from bottom-left"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-se"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "se",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("se", e)
+                                    }
+                                    aria-label="Resize from bottom-right"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-n"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "n",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("n", e)
+                                    }
+                                    aria-label="Resize from top"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-s"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "s",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("s", e)
+                                    }
+                                    aria-label="Resize from bottom"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-e"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "e",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("e", e)
+                                    }
+                                    aria-label="Resize from right"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-handle preview-handle-w"
+                                    style={{
+                                      cursor: getRotatedResizeCursor(
+                                        "w",
+                                        previewRotation,
+                                      ),
+                                    }}
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("w", e)
+                                    }
+                                    aria-label="Resize from left"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="preview-rotate-handle"
+                                    onPointerDown={(e) =>
+                                      beginPreviewInteraction("rotate", e)
+                                    }
+                                    aria-label="Rotate image"
+                                  />
                                 </>
                               ) : null}
                             </div>
@@ -3181,7 +3311,9 @@ export function PrintPage() {
                         />
                       ) : activePreviewFile ? (
                         <div className="print-preview-fallback">
-                          <strong>Preview unavailable for this file type</strong>
+                          <strong>
+                            Preview unavailable for this file type
+                          </strong>
                           <span>
                             You can still continue. Final print will use your
                             selected paper and settings.
@@ -3215,7 +3347,9 @@ export function PrintPage() {
 
                   <div className="breakdown-row">
                     <span className="breakdown-label">Selected mode</span>
-                    <span className="breakdown-value">{selectedPrintModeLabel}</span>
+                    <span className="breakdown-value">
+                      {selectedPrintModeLabel}
+                    </span>
                   </div>
 
                   {doubleSided &&
@@ -3305,7 +3439,9 @@ export function PrintPage() {
               {isSubmitting ? (
                 <div className="upload-progress-card" aria-live="polite">
                   <div className="upload-progress-header">
-                    <span className="upload-progress-title">Uploading files</span>
+                    <span className="upload-progress-title">
+                      Uploading files
+                    </span>
                     <span className="upload-progress-percent">
                       {Math.round(uploadProgress)}%
                     </span>
@@ -3313,7 +3449,9 @@ export function PrintPage() {
                   <div className="upload-progress-track">
                     <div
                       className="upload-progress-fill"
-                      style={{ width: `${Math.max(0, Math.min(100, uploadProgress))}%` }}
+                      style={{
+                        width: `${Math.max(0, Math.min(100, uploadProgress))}%`,
+                      }}
                     />
                   </div>
                   <p className="upload-progress-status">
