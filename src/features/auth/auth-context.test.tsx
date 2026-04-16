@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { AuthProvider, useAuth } from "./auth-context";
-import { googleLogin } from "../../services/api/authApi";
+import { googleLogin, registerWithGoogle } from "../../services/api/authApi";
 import { setTokenBundle } from "../../services/storage/tokenStorage";
 
 vi.mock("../../services/api/authApi", () => ({
@@ -76,6 +76,39 @@ describe("AuthProvider", () => {
     expect(setTokenBundle).toHaveBeenCalledWith({
       accessToken: "access-token",
       refreshToken: "refresh-token",
+    });
+  });
+
+  it("falls back to google signup when google login account is missing", async () => {
+    vi.mocked(googleLogin).mockRejectedValue(
+      new Error("Your account does not exist. Please signup."),
+    );
+    vi.mocked(registerWithGoogle).mockResolvedValue({
+      user: { id: "google-2", email: "new-user@printpe.com" },
+      accessToken: "access-token-2",
+      refreshToken: "refresh-token-2",
+    });
+
+    render(
+      <AuthProvider>
+        <GoogleSignInProbe />
+      </AuthProvider>,
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "Sign in with Google",
+    });
+    button.click();
+
+    expect(await screen.findByText("signedIn")).toBeInTheDocument();
+    expect(googleLogin).toHaveBeenCalledWith({ idToken: "google-id-token" });
+    expect(registerWithGoogle).toHaveBeenCalledWith({
+      idToken: "google-id-token",
+      acceptedTerms: true,
+    });
+    expect(setTokenBundle).toHaveBeenCalledWith({
+      accessToken: "access-token-2",
+      refreshToken: "refresh-token-2",
     });
   });
 });

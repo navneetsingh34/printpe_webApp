@@ -11,12 +11,13 @@ import {
 import {
   forgotPassword,
   getMe,
-  googleLogin,
+  googleLogin as googleLoginApi,
   login,
   register,
-  registerWithGoogle,
+  registerWithGoogle as registerWithGoogleApi,
   resetPassword,
 } from "../../services/api/authApi";
+import { ApiError } from "../../services/api/httpClient";
 import { getUnreadCount } from "../../services/api/notificationsApi";
 import {
   clearTokenBundle,
@@ -56,6 +57,27 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function shouldFallbackToGoogleRegister(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    if (error.status === 404 || error.status === 409) {
+      return true;
+    }
+    if (error.status >= 500) {
+      return false;
+    }
+  }
+
+  const message = (error as Error | undefined)?.message?.toLowerCase?.() ?? "";
+  return (
+    message.includes("account") &&
+    (message.includes("not exist") ||
+      message.includes("doesn't exist") ||
+      message.includes("does not exist") ||
+      message.includes("signup") ||
+      message.includes("register"))
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -69,6 +91,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await getMe();
     setUser(profile);
   }, []);
+
+  const applyAuthenticatedSession = useCallback(async (response: {
+    accessToken: string;
+    refreshToken: string;
+    user: AuthUser;
+  }) => {
+    await setTokenBundle({
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+    });
+    setUser(response.user);
+    setUnreadCount(0);
+    setStatus("signedIn");
+  }, []);
+
+  const continueWithGoogle = useCallback(
+    async (idToken: string, acceptedTerms = true) => {
+      try {
+        const response = await googleLoginApi({ idToken });
+        await applyAuthenticatedSession(response);
+        return;
+      } catch (error) {
+        if (!shouldFallbackToGoogleRegister(error)) {
+          throw error;
+        }
+      }
+
+      const response = await registerWithGoogleApi({ idToken, acceptedTerms });
+      await applyAuthenticatedSession(response);
+    },
+    [applyAuthenticatedSession],
+  );
 
   useEffect(() => {
     let notificationsSocket: Socket | null = null;
@@ -119,33 +173,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unreadCount,
       signIn: async (input) => {
         const response = await login(input);
-        await setTokenBundle({
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-        });
-        setUser(response.user);
-        setUnreadCount(0);
-        setStatus("signedIn");
+        await applyAuthenticatedSession(response);
       },
       signInWithGoogle: async (input) => {
-        const response = await googleLogin(input);
-        await setTokenBundle({
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-        });
-        setUser(response.user);
-        setUnreadCount(0);
-        setStatus("signedIn");
+        await continueWithGoogle(input.idToken, true);
       },
       registerWithGoogle: async (input) => {
-        const response = await registerWithGoogle(input);
-        await setTokenBundle({
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-        });
-        setUser(response.user);
-        setUnreadCount(0);
-        setStatus("signedIn");
+        await continueWithGoogle(input.idToken, input.acceptedTerms);
       },
       signUp: async (input) => {
         return register(input);
@@ -167,7 +201,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUnreadCount,
       refreshProfile,
     }),
-    [status, user, unreadCount, refreshUnreadCount, refreshProfile],
+    [
+      status,
+      user,
+      unreadCount,
+      applyAuthenticatedSession,
+      continueWithGoogle,
+      refreshUnreadCount,
+      refreshProfile,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

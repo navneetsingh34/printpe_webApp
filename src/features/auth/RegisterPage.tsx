@@ -42,12 +42,12 @@ export function RegisterPage() {
     );
 
     if (oauthError) {
-      setError(`Google signup failed: ${oauthError}`);
+      setError(`Google authentication failed: ${oauthError}`);
       return;
     }
 
     if (!idTokenFromHash) {
-      setError("Google signup failed. Missing ID token.");
+      setError("Google authentication failed. Missing ID token.");
       return;
     }
 
@@ -59,7 +59,7 @@ export function RegisterPage() {
         navigate("/");
       })
       .catch((e: unknown) => {
-        setError((e as Error).message || "Google signup failed.");
+        setError((e as Error).message || "Google authentication failed.");
       })
       .finally(() => {
         setLoading(false);
