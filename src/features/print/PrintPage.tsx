@@ -26,9 +26,9 @@ import {
   TieredRate,
 } from "../../shared/types/shop";
 import { BackButton } from "../../shared/ui/BackButton";
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 
-type PrintStep = "intro" | "upload" | "configure" | "payment";
+type PrintStep = "upload" | "configure";
 type PaymentPhase =
   | "idle"
   | "creating_job"
@@ -402,79 +402,6 @@ function isPrinterOperational(status: unknown): boolean {
   return onlineHints.some((hint) => normalized.includes(hint));
 }
 
-type RealtimePrinterSnapshotPayload = {
-  shopId: string;
-  printers?: Array<{
-    status?: unknown;
-    supportsColor?: boolean;
-    supportsDoubleSided?: boolean;
-    paperSizes?: string[];
-  }>;
-  runtimeOnline?: boolean;
-};
-
-async function getRealtimeShopPrinters(
-  shopId: string,
-): Promise<RealtimePrinterSnapshotPayload["printers"]> {
-  const bundle = await getTokenBundle();
-  if (!bundle?.accessToken) {
-    throw new Error("Please sign in again to check realtime printer status.");
-  }
-
-  return new Promise((resolve, reject) => {
-    const socket = io(`${env.wsBaseUrl}/companion`, {
-      transports: ["websocket"],
-      auth: { token: bundle.accessToken },
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 2,
-      reconnectionDelay: 500,
-      timeout: 8000,
-    });
-
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("Realtime printer check timed out."));
-    }, 7000);
-
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      socket.off("connect", onConnect);
-      socket.off("connect_error", onConnectError);
-      socket.off("printers:snapshot", onSnapshot);
-      socket.off("error", onSocketError);
-      socket.disconnect();
-    };
-
-    const onConnect = () => {
-      // Ask companion namespace to bind this session to shop runtime before snapshot.
-      socket.emit("companion:connect", { shopId });
-      socket.emit("printers:subscribe", { shopId });
-    };
-
-    const onConnectError = () => {
-      cleanup();
-      reject(new Error("Unable to connect for realtime printer check."));
-    };
-
-    const onSnapshot = (payload: RealtimePrinterSnapshotPayload) => {
-      if (payload?.shopId !== shopId) return;
-      cleanup();
-      resolve(Array.isArray(payload.printers) ? payload.printers : []);
-    };
-
-    const onSocketError = (payload?: { message?: string }) => {
-      cleanup();
-      reject(new Error(payload?.message ?? "Realtime printer check failed."));
-    };
-
-    socket.on("connect", onConnect);
-    socket.on("connect_error", onConnectError);
-    socket.on("printers:snapshot", onSnapshot);
-    socket.on("error", onSocketError);
-  });
-}
-
 function supportsRequestedPaperSize(
   availablePaperSizes: string[] | undefined,
   selectedPaperSize: string,
@@ -488,6 +415,56 @@ function supportsRequestedPaperSize(
   return availablePaperSizes.some(
     (size) => String(size).trim().toUpperCase() === normalizedSelected,
   );
+}
+
+function getPrinterAvailabilityError(args: {
+  printers: Array<{
+    status?: unknown;
+    supportsColor?: boolean;
+    supportsDoubleSided?: boolean;
+    paperSizes?: string[];
+  }>;
+  color: boolean;
+  doubleSided: boolean;
+  paperSize: string;
+}): string | null {
+  const onlinePrinters = args.printers.filter((printer) =>
+    isPrinterOperational(printer.status),
+  );
+
+  if (onlinePrinters.length === 0) {
+    return args.color
+      ? "No color printer is online. Please choose another shop."
+      : "No B&W printer is online. Please choose another shop.";
+  }
+
+  const modeMatchedPrinters = onlinePrinters.filter((printer) =>
+    args.color ? printer.supportsColor === true : printer.supportsColor !== true,
+  );
+
+  if (modeMatchedPrinters.length === 0) {
+    return args.color
+      ? "No color printer is online. Please choose another shop."
+      : "No B&W printer is online. Please choose another shop.";
+  }
+
+  const hasEligiblePrinter = modeMatchedPrinters.some((printer) => {
+    if (args.doubleSided && printer.supportsDoubleSided === false) return false;
+    if (!supportsRequestedPaperSize(printer.paperSizes, args.paperSize)) {
+      return false;
+    }
+    return true;
+  });
+
+  if (!hasEligiblePrinter) {
+    if (args.color) {
+      return "No online color printer is available for this shop. Please choose another shop.";
+    }
+
+    return "No suitable printer is available for these options. Please choose another shop.";
+  }
+
+  return null;
 }
 
 function dedupeFiles(
@@ -696,7 +673,7 @@ export function PrintPage() {
   const [searchParams] = useSearchParams();
   const [shops, setShops] = useState<PrintShop[]>([]);
   const [shopId, setShopId] = useState("");
-  const [step, setStep] = useState<PrintStep>("intro");
+  const [step, setStep] = useState<PrintStep>("upload");
   const [pricing, setPricing] = useState<ShopPricingConfig>(defaultPricing());
   const [pricingLoadError, setPricingLoadError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -1550,7 +1527,7 @@ export function PrintPage() {
   }, []);
 
   const resetFlow = () => {
-    setStep("intro");
+    setStep("upload");
     setFiles([]);
     setPreviewIndex(0);
     setFilePages(1);
@@ -1754,6 +1731,7 @@ export function PrintPage() {
     }
 
     setFiles(uniqueFiles.length > 0 ? uniqueFiles : nextFiles);
+    setStep("configure");
     setPreviewIndex(0);
     setPayableAmount(null);
     if (duplicateCount > 0) {
@@ -1789,121 +1767,6 @@ export function PrintPage() {
       }
       return merged;
     });
-  };
-
-  const proceedToPayment = async () => {
-    if (!files.length) {
-      setError("Please select at least one document before continuing.");
-      return;
-    }
-
-    if (!shopId) {
-      setError("Please select a print shop before continuing.");
-      return;
-    }
-
-    const selectedShop = shops.find((shop) => shop.id === shopId);
-    if (!selectedShop) {
-      setError("Selected shop was not found. Please reselect a shop.");
-      return;
-    }
-
-    const selectedShopIsOnline = shopOnlineMap[shopId] ?? selectedShop.isActive;
-    if (!selectedShopIsOnline) {
-      setError(
-        "Selected shop is currently offline. Please choose an online shop.",
-      );
-      return;
-    }
-
-    setStatus("Checking selected printer configuration...");
-    try {
-      let shopPrinters: Array<{
-        status?: unknown;
-        supportsColor?: boolean;
-      }> = [];
-
-      try {
-        const realtimePrinters = await getRealtimeShopPrinters(shopId);
-        shopPrinters = Array.isArray(realtimePrinters) ? realtimePrinters : [];
-        const realtimeOnlinePrinters = shopPrinters.filter((printer) =>
-          isPrinterOperational(printer.status),
-        );
-
-        let hasMatchingOnlinePrinter = color
-          ? realtimeOnlinePrinters.some(
-              (printer) =>
-                (printer as { supportsColor?: boolean }).supportsColor !==
-                false,
-            )
-          : realtimeOnlinePrinters.length > 0;
-
-        // Guard against transient stale realtime snapshots by validating once via REST.
-        if (!hasMatchingOnlinePrinter) {
-          const apiPrinters = await getShopPrinters(shopId);
-          const apiOnlinePrinters = (
-            apiPrinters as Array<{
-              status?: unknown;
-              supportsColor?: boolean;
-            }>
-          ).filter((printer) => isPrinterOperational(printer.status));
-
-          hasMatchingOnlinePrinter = color
-            ? apiOnlinePrinters.some(
-                (printer) =>
-                  (printer as { supportsColor?: boolean }).supportsColor !==
-                  false,
-              )
-            : apiOnlinePrinters.length > 0;
-        }
-
-        if (!hasMatchingOnlinePrinter) {
-          setStatus("");
-          setError(
-            color
-              ? "No online color printer is available on desktop for this shop."
-              : "No online printer is available on desktop for this shop.",
-          );
-          return;
-        }
-      } catch {
-        const apiPrinters = await getShopPrinters(shopId);
-        const apiOnlinePrinters = (
-          apiPrinters as Array<{
-            status?: unknown;
-            supportsColor?: boolean;
-          }>
-        ).filter((printer) => isPrinterOperational(printer.status));
-
-        const hasMatchingOnlinePrinter = color
-          ? apiOnlinePrinters.some(
-              (printer) =>
-                (printer as { supportsColor?: boolean }).supportsColor !==
-                false,
-            )
-          : apiOnlinePrinters.length > 0;
-
-        if (!hasMatchingOnlinePrinter) {
-          setStatus("");
-          setError(
-            color
-              ? "No online color printer is available on desktop for this shop."
-              : "No online printer is available on desktop for this shop.",
-          );
-          return;
-        }
-      }
-    } catch {
-      setStatus("");
-      setError(
-        "Unable to verify desktop printer status right now. Please try again.",
-      );
-      return;
-    }
-
-    setError("");
-    setStatus("");
-    setStep("payment");
   };
 
   const removeFileAtIndex = (indexToRemove: number) => {
@@ -1984,34 +1847,34 @@ export function PrintPage() {
     }
 
     setStatus("Checking shop and printer availability...");
-    const shopPrinters = await getShopPrinters(shopId);
-    const onlinePrinters = shopPrinters.filter((printer) =>
-      isPrinterOperational(printer.status),
-    );
-    const hasOnlinePrinter = onlinePrinters.length > 0;
+    let shopPrinters: Array<{
+      status?: unknown;
+      supportsColor?: boolean;
+      supportsDoubleSided?: boolean;
+      paperSizes?: string[];
+    }> = [];
 
-    const hasEligiblePrinterForSelection = onlinePrinters.some((printer) => {
-      if (color && printer.supportsColor === false) return false;
-      if (doubleSided && printer.supportsDoubleSided === false) return false;
-      if (!supportsRequestedPaperSize(printer.paperSizes, paperSize))
-        return false;
-      return true;
+    try {
+      shopPrinters = await getShopPrinters(shopId);
+    } catch {
+      setStatus("");
+      setError(
+        "Unable to verify printer availability right now. Please try again.",
+      );
+      return;
+    }
+
+    const printerAvailabilityError = getPrinterAvailabilityError({
+      printers: shopPrinters,
+      color,
+      doubleSided,
+      paperSize,
     });
 
-    const bindingRequiresManual = binding !== "none";
-    const manualWork =
-      bindingRequiresManual ||
-      !hasOnlinePrinter ||
-      !hasEligiblePrinterForSelection;
-
-    if (manualWork) {
-      setStatus(
-        bindingRequiresManual
-          ? "Binding jobs are handled as manual work by the shop."
-          : hasOnlinePrinter
-            ? "No suitable printer is available for these options. This job will be created as manual work."
-            : "No printer is currently online. This job will be created as manual work.",
-      );
+    if (printerAvailabilityError) {
+      setStatus("");
+      setError(printerAvailabilityError);
+      return;
     }
 
     if (!env.razorpayKeyId) {
@@ -2162,7 +2025,7 @@ export function PrintPage() {
         printOptions: {
           copies,
           color,
-          manualWork,
+          manualWork: false,
           doubleSided,
           paperSize,
           binding: binding || undefined,
@@ -2306,11 +2169,6 @@ export function PrintPage() {
   };
 
   const handleBackClick = () => {
-    if (step === "payment") {
-      setStep("configure");
-      return;
-    }
-
     if (step === "configure") {
       setStep("upload");
       return;
@@ -2359,72 +2217,10 @@ export function PrintPage() {
         </p>
       </div>
 
-      {step === "intro" ? (
-        <article className="card print-process-card animate-rise delay-2">
-          <div className="process-header">
-            <h3>How It Works</h3>
-            <p className="process-subtitle">
-              Complete your print job in 3 simple steps
-            </p>
-          </div>
-
-          <div className="steps-container">
-            <button
-              type="button"
-              className="step-card step-1 animate-rise"
-              style={{ animationDelay: "100ms" }}
-              onClick={() => setStep("upload")}
-            >
-              <div className="step-number">1</div>
-              <h4>Upload</h4>
-              <p>Choose your file (PDF, JPG, PNG)</p>
-            </button>
-
-            <div className="step-arrow">→</div>
-
-            <button
-              type="button"
-              className="step-card step-2 animate-rise"
-              style={{ animationDelay: "150ms" }}
-              onClick={() => setStep("upload")}
-            >
-              <div className="step-number">2</div>
-              <h4>Configure</h4>
-              <p>Pick size, color & binding options</p>
-            </button>
-
-            <div className="step-arrow">→</div>
-
-            <button
-              type="button"
-              className="step-card step-3 animate-rise"
-              style={{ animationDelay: "200ms" }}
-              onClick={() => setStep("upload")}
-            >
-              <div className="step-number">3</div>
-              <h4>Confirm</h4>
-              <p>Review & create your print job</p>
-            </button>
-          </div>
-
-          <button
-            className="btn-primary btn-start-flow"
-            type="button"
-            onClick={() => setStep("upload")}
-          >
-            <span>Start Upload</span>
-            <span aria-hidden="true" className="btn-start-flow-arrow">
-              ↑
-            </span>
-          </button>
-        </article>
-      ) : null}
-
-      {step !== "intro" ? (
-        <form
-          className="card form animate-rise delay-3 print-flow-form"
-          onSubmit={onSubmit}
-        >
+      <form
+        className="card form animate-rise delay-3 print-flow-form"
+        onSubmit={onSubmit}
+      >
           {step === "upload" ? (
             <div className="upload-section animate-rise delay-1">
               <div
@@ -2643,21 +2439,19 @@ export function PrintPage() {
               {files.length ? (
                 <div className="upload-actions">
                   <button
-                    className="btn-primary btn-next-step"
+                    className="btn-primary"
                     type="button"
                     onClick={() => setStep("configure")}
                   >
-                    <span>Continue to Configure</span>
-                    <span aria-hidden="true" className="btn-next-step-arrow">
-                      →
-                    </span>
+                    Back to Configuration
                   </button>
                 </div>
               ) : null}
+
             </div>
           ) : null}
 
-          {step === "configure" || step === "payment" ? (
+          {step === "configure" ? (
             <>
               {files.length ? (
                 <article className="upload-files-summary">
@@ -3422,16 +3216,6 @@ export function PrintPage() {
           ) : null}
 
           {step === "configure" ? (
-            <button
-              className="btn-primary"
-              type="button"
-              onClick={proceedToPayment}
-            >
-              Proceed to Confirm
-            </button>
-          ) : null}
-
-          {step === "payment" ? (
             <>
               {paymentPhase !== "idle" ? (
                 <p className="print-feedback print-feedback-success">
@@ -3487,8 +3271,7 @@ export function PrintPage() {
           {error ? (
             <p className="print-feedback print-feedback-error">{error}</p>
           ) : null}
-        </form>
-      ) : null}
+      </form>
 
       {leaveWarningOpen ? (
         <div

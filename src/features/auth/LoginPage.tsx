@@ -42,12 +42,12 @@ export function LoginPage() {
     );
 
     if (oauthError) {
-      setError(`Google login failed: ${oauthError}`);
+      setError(`Google authentication failed: ${oauthError}`);
       return;
     }
 
     if (!idTokenFromHash) {
-      setError("Google login failed. Missing ID token.");
+      setError("Google authentication failed. Missing ID token.");
       return;
     }
 
@@ -58,7 +58,7 @@ export function LoginPage() {
         navigate(redirectAfterLogin, { replace: true });
       })
       .catch((e: unknown) => {
-        setError((e as Error).message || "Google login failed.");
+        setError((e as Error).message || "Google authentication failed.");
       })
       .finally(() => {
         setLoading(false);
