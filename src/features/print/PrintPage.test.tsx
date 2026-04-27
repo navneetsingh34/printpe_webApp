@@ -151,6 +151,56 @@ describe("PrintPage", () => {
     await screen.findByRole("heading", { name: "Page 2" });
   });
 
+  it("shows page assignment and copy controls for single uploaded image", async () => {
+    mocked.getAllShops.mockResolvedValue([
+      {
+        id: "shop-1",
+        name: "Campus Print",
+        address: "Main Road",
+        latitude: 0,
+        longitude: 0,
+        phone: "123",
+        email: "a@b.com",
+        openingTime: "09:00",
+        closingTime: "18:00",
+        isActive: true,
+      },
+    ]);
+    mocked.getShopPricing.mockResolvedValue({
+      paperPricing: [
+        {
+          paperSize: "A4",
+          enabled: true,
+          bw: { firstNPages: 20, firstNRate: 0.5, afterNRate: 0.5 },
+          color: { firstNPages: 20, firstNRate: 1, afterNRate: 1 },
+          doubleSidedDiscountPercent: 0,
+        },
+      ],
+      bindings: [{ id: "none", label: "None", price: 0, enabled: true }],
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <PrintPage />
+      </MemoryRouter>,
+    );
+
+    const fileInput = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    const singlePhoto = new File(["single"], "single.png", {
+      type: "image/png",
+    });
+    fireEvent.change(fileInput, {
+      target: { files: [singlePhoto] },
+    });
+
+    await screen.findByRole("heading", { name: "Page 1" });
+    expect(
+      screen.getByLabelText("Copies for page 1"),
+    ).toBeInTheDocument();
+  });
+
   it("blocks payment when no color printer is available for the selected shop", async () => {
     mocked.getAllShops.mockResolvedValue([
       {
