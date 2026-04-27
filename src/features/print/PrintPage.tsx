@@ -2674,7 +2674,7 @@ export function PrintPage() {
                     </div>
                   ) : null}
 
-                  {imagePreviewFiles.length > 1 ? (
+                  {imagePreviewFiles.length > 0 ? (
                     <div className="print-page-grouping-card">
                       <div className="print-page-grouping-head">
                         <strong>Page Assignment</strong>
